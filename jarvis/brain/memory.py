@@ -74,6 +74,14 @@ class Memory:
         self._lock = threading.Lock()
 
         self.recall_limit = cfg.get("memory.recall_limit", 5)
+        # Calibrated, not guessed. On bge-small the baseline similarity between
+        # any two English sentences is high, so a low bar means recall never
+        # returns nothing and JARVIS answers unrelated questions from unrelated
+        # memories. Measured against real stored facts:
+        #   genuinely related    0.65 - 0.77
+        #   entirely unrelated   0.43 - 0.49
+        # 0.58 sits in the gap.
+        self.min_similarity = cfg.get("memory.min_similarity", 0.58)
         self._embedder = None
         if cfg.get("memory.semantic", True):
             self._load_embedder()
@@ -197,7 +205,7 @@ class Memory:
             for row in self._all_with_vectors():
                 other = np.frombuffer(row["embedding"], dtype=np.float32)
                 score = float(vector @ other / (norm * (np.linalg.norm(other) + 1e-9)))
-                if score > 0.45:
+                if score >= self.min_similarity:
                     scored.append((score, row))
             scored.sort(key=lambda x: -x[0])
             for score, row in scored[:limit]:

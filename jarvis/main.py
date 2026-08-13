@@ -35,7 +35,7 @@ from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
 from jarvis.config import CONFIG, LOGS_DIR  # noqa: E402
 from jarvis.state import State  # noqa: E402
-from jarvis.tools import memory_tools, registry  # noqa: E402
+from jarvis.tools import documents, memory_tools, registry  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
 from jarvis.voice.tts import Voice, make_chime  # noqa: E402
 
@@ -89,6 +89,7 @@ class Jarvis:
         self._chime = None
         self._turn: asyncio.Task | None = None
         self._interrupted = False
+        self._last_proactive = ""
 
     # ── state ──────────────────────────────────────────────────────
     async def set_state(self, state: State) -> None:
@@ -110,6 +111,7 @@ class Jarvis:
 
         self.memory = Memory(self.cfg)
         memory_tools.bind(self.memory)
+        documents.bind(self.memory)   # so he can export the conversation
 
         self.brain = Brain(self.cfg, self.memory)
         ok, message = await self.brain.available()
@@ -297,6 +299,35 @@ class Jarvis:
         self.chime()
         asyncio.create_task(self.set_state(State.LISTENING))
 
+    # ── speaking unprompted ────────────────────────────────────────
+    async def _say_proactively(self, text: str) -> None:
+        """A timer elapsed, or something else wants the floor.
+
+        Rules, in order: never while muted, never on top of a reply in
+        progress, and never the same announcement twice. Waiting is preferable
+        to interrupting -- an announcement that lands mid-sentence is worse
+        than one that lands ten seconds late.
+        """
+        if not text or not self.listener or self.listener.muted:
+            return
+        if text == self._last_proactive:
+            return
+
+        for _ in range(120):          # up to ~30s of politeness
+            busy = (self.state in (State.THINKING, State.TOOL, State.SPEAKING)
+                    or (self.speaker and self.speaker.is_speaking))
+            if not busy:
+                break
+            await asyncio.sleep(0.25)
+        else:
+            log.info("dropped a proactive announcement: still busy")
+            return
+
+        self._last_proactive = text
+        log.info("speaking unprompted: %s", text)
+        await BUS.emit("proactive.spoken", text=text)
+        await self.speak(text)
+
     async def sleep_now(self) -> None:
         """Return to wake mode and get out of the way."""
         if self.listener:
@@ -315,6 +346,8 @@ class Jarvis:
         BUS.on("ui.interrupt", lambda _: self._on_barge_in())
         BUS.on("wake.detected", lambda _: self._on_wake())
         BUS.on("barge_in", lambda _: self._on_barge_in())
+        BUS.on("proactive", lambda ev: asyncio.create_task(
+            self._say_proactively(ev.get("text", ""))))
 
         listen_task = asyncio.create_task(self.listener.run())
         listen_task.add_done_callback(self._listener_died)

@@ -22,6 +22,8 @@ import time
 
 import numpy as np
 
+from .pronounce import split_for_synthesis
+
 log = logging.getLogger("jarvis.speaker")
 
 _SENTINEL = object()
@@ -77,14 +79,20 @@ class Speaker:
 
     # ── public API ─────────────────────────────────────────────────
     def say(self, text: str) -> None:
-        """Queue a sentence. Returns immediately; speech follows in order."""
+        """Queue a sentence. Returns immediately; speech follows in order.
+
+        Long sentences are split before synthesis: past ~180 characters Kokoro
+        starts losing coherence and repeating syllables. The pieces play back to
+        back through the same stream, so the split is inaudible.
+        """
         text = (text or "").strip()
         if not text:
             return
         self._stop.clear()
         self._busy.set()
         with self._lock:
-            self._text.put((self._generation, text))
+            for chunk in split_for_synthesis(text):
+                self._text.put((self._generation, chunk))
 
     async def wait_until_done(self, timeout: float = 120.0) -> bool:
         """Block until everything queued has been spoken. False if interrupted."""

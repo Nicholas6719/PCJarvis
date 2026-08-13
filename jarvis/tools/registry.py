@@ -183,6 +183,7 @@ async def execute(name: str, arguments: dict) -> str:
 
 def load_all() -> int:
     """Import every tool module so their decorators run."""
-    from . import files, media, memory_tools, system, web  # noqa: F401
+    from . import (browser, documents, files, media,  # noqa: F401
+                   memory_tools, system, timers, web)
 
     return len(REGISTRY)

@@ -51,7 +51,7 @@ def main() -> int:
         scores = []
         for v in voices:
             try:
-                samples, sr = kokoro.create(text, voice=v, speed=1.0, lang="en-gb")
+                samples, sr = kokoro.create(text, voice=v, speed=1.0, lang="en-us")
             except Exception:
                 scores.append(0.0)
                 continue

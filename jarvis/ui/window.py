@@ -22,6 +22,7 @@ import webview
 
 from ..bus import BUS
 from ..config import BUNDLE, CONFIG, FROZEN
+from .bridge import UIChannel
 
 log = logging.getLogger("jarvis.ui")
 
@@ -63,29 +64,6 @@ class Api:
             "memories": app.memory.count() if app.memory else 0,
         }
 
-    def levels(self) -> dict:
-        """Live audio levels, polled by the reactor animation."""
-        app = self._bridge.app
-        if not app:
-            return {"mic": 0.0, "out": 0.0}
-        return {
-            "mic": round(float(app.mic.level), 4) if app.mic else 0.0,
-            "out": round(float(app.player.envelope), 4) if app.player else 0.0,
-        }
-
-    def telemetry(self) -> dict:
-        try:
-            import psutil
-            battery = psutil.sensors_battery()
-            return {
-                "cpu": psutil.cpu_percent(interval=None),
-                "mem": psutil.virtual_memory().percent,
-                "battery": round(battery.percent) if battery else None,
-                "charging": bool(battery.power_plugged) if battery else False,
-            }
-        except Exception:
-            return {}
-
     def toggle_fullscreen(self) -> bool:
         """F11 / the maximise button. Returns the new state."""
         if self._bridge.window:
@@ -116,6 +94,7 @@ class Bridge:
         self.fullscreen = bool(CONFIG.get("ui.fullscreen", True))
         self._is_fullscreen = self.fullscreen
         self._minimized = False
+        self.channel = UIChannel(lambda: self.window, lambda: self.app)
 
     # ── loop thread ────────────────────────────────────────────────
     def start(self) -> None:
@@ -136,6 +115,7 @@ class Bridge:
         setup_logging(CONFIG.get("system.log_level", "INFO"))
         self.app = Jarvis(CONFIG)
         BUS.on("*", self._forward)
+        self.channel.start()
 
         if not await self.app.boot():
             self.push("boot_failed", {
@@ -159,17 +139,15 @@ class Bridge:
         self.push(kind, event)
 
     def push(self, kind: str, payload: dict | None = None) -> None:
-        # Once the window is gone, evaluate_js raises ObjectDisposedException
-        # from the .NET side and pywebview logs a full traceback for each one.
-        # During shutdown the pipeline is still emitting events, so without this
-        # guard closing the app produces a wall of errors.
-        if not self.window or self._closing:
+        """Hand an event to the writer thread. Never blocks the event loop.
+
+        This used to call evaluate_js directly from the loop, which stalled the
+        audio pipeline on the UI thread -- the interface fell behind and so did
+        the listener.
+        """
+        if self._closing:
             return
-        try:
-            data = json.dumps({"type": kind, **(payload or {})}, default=str)
-            self.window.evaluate_js(f"window.onJarvis({data})")
-        except Exception:
-            log.debug("could not push %r to the page", kind)
+        self.channel.send(kind, payload)
 
     # ── page -> loop ───────────────────────────────────────────────
     def emit(self, kind: str, **payload) -> None:
@@ -210,6 +188,7 @@ class Bridge:
 
     def stop(self) -> None:
         self._closing = True   # stop pushing into a window that is going away
+        self.channel.close()
         if self.app and self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.app.shutdown(), self.loop)
         time.sleep(0.3)

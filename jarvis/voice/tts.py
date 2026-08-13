@@ -21,6 +21,7 @@ from scipy import signal as _sig
 
 from ..config import BUNDLE, MODELS_DIR
 from . import jarvis_chain
+from .pronounce import for_speech, split_for_synthesis
 
 log = logging.getLogger("jarvis.tts")
 
@@ -35,6 +36,13 @@ IR_PATH = BUNDLE / "jarvis" / "voice" / "ir" / "workshop.wav"
 # to configuration, and config is validated against it at load.
 LOCKED_VOICE = "bm_daniel"
 LOCKED_SPEED = 1.0
+
+# The phonemiser, chosen by ear and separate from the voice itself. bm_daniel
+# keeps its British timbre either way; this only decides pronunciation. Under
+# en-gb "schedule" comes out "SHED-yool", which was jarring against an American
+# ear, so en-us is used: a British-sounding voice that says words the way he
+# says them. Locked for the same reason the voice is.
+LOCKED_LANG = "en-us"
 
 # Split on sentence boundaries so we can start speaking before the LLM has
 # finished writing. Keeps the delimiter attached to the sentence.
@@ -58,7 +66,12 @@ _MULTISPACE = re.compile(r"\s{2,}")
 
 
 def speakable(text: str) -> str:
-    """Reduce model output to something a synthesizer can actually say."""
+    """Reduce model output to something a synthesizer can actually say.
+
+    Two stages: strip what cannot be spoken at all (markdown, URLs, paths),
+    then rewrite what would be spoken *wrongly* -- digits, acronyms, units and
+    times. See voice/pronounce.py for why each of those matters.
+    """
     text = _MARKDOWN.sub("", text)
     text = _URL.sub("a link", text)
     text = _PATH.sub("that path", text)
@@ -66,7 +79,7 @@ def speakable(text: str) -> str:
         text = text.replace(src, dst)
     # Anything still outside the speakable range would be guesswork.
     text = "".join(c for c in text if c.isascii() or c.isalpha())
-    return _MULTISPACE.sub(" ", text).strip()
+    return for_speech(_MULTISPACE.sub(" ", text).strip())
 
 
 class Voice:
@@ -111,7 +124,7 @@ class Voice:
     def _synthesize_raw(self, text: str) -> tuple[np.ndarray, int]:
         if self._backend == "kokoro":
             samples, sr = self._kokoro.create(
-                text, voice=self.voice, speed=self.speed, lang="en-gb"
+                text, voice=self.voice, speed=self.speed, lang=LOCKED_LANG
             )
             return np.asarray(samples, dtype=np.float32), int(sr)
         return self._sapi(text)

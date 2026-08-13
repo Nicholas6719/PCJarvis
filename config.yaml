@@ -110,7 +110,8 @@ memory:
   db_path: data/jarvis.db
   semantic: true            # false = keyword (FTS5) recall only, no model download
   embed_model: BAAI/bge-small-en-v1.5
-  recall_limit: 5           # memories injected into context per turn
+  recall_limit: 5           # memories returned per recall
+  min_similarity: 0.58      # below this it is not a match (see memory.py)
 
 tools:
   confirm_destructive: true # shutdown / shell / delete need a spoken yes

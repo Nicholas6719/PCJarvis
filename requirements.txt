@@ -42,5 +42,8 @@ pillow>=10.3
 # Memory: semantic recall (ONNX, CPU) — FTS5 keyword search is stdlib
 fastembed>=0.6
 
+# Document creation
+fpdf2>=2.8
+
 # Config
 pyyaml>=6.0

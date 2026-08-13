@@ -64,6 +64,33 @@ EXTRAS: dict[str, set[str]] = {
     "shutdown_computer":   {"shutdown", "shut down", "restart", "reboot"},
     "run_command":         {"powershell", "command line", "run command",
                             "terminal command", "script"},
+
+    # ── documents ──
+    "export_conversation": {"pdf", "export", "transcript", "write up",
+                            "save our conversation", "save this conversation",
+                            "document of our", "our conversation"},
+    "create_pdf":          {"pdf", "document", "write a document"},
+    "save_text_file":      {"save to a file", "text file", "save this as",
+                            "write a file"},
+    "list_documents":      {"documents you", "what have you created",
+                            "my documents folder"},
+
+    # ── browser & navigation ──
+    "open_website":        {"website", "site", "youtube", "github", "reddit",
+                            "gmail", "browser", "go to", "pull up", "open up"},
+    "search_in_browser":   {"show me", "pull up", "browse", "look up online"},
+    "open_youtube_search": {"youtube"},
+    "get_directions":      {"directions", "navigate", "route", "how do i get",
+                            "take me to", "map"},
+    "open_folder":         {"folder", "downloads", "explorer", "my documents",
+                            "desktop folder", "pictures"},
+
+    # ── timers ──
+    "set_timer":           {"timer", "remind me in", "countdown", "alarm",
+                            "wake me in", "give me"},
+    "list_timers":         {"timers", "how long left", "time remaining"},
+    "cancel_timer":        {"cancel the timer", "stop the timer",
+                            "cancel timer", "forget the timer"},
 }
 
 _WORD = re.compile(r"[a-z']+")

@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import logging
+import time
 
 import numpy as np
 import sounddevice as sd
@@ -26,7 +27,12 @@ class Microphone:
         self.sample_rate = sample_rate
         self.block_size = block_size
         self.device = device
-        self._queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=64)
+        # Generous: 256 frames is ~20s of audio. The queue only backs up if the
+        # event loop stalls, and when it does we would rather hold the audio
+        # than lose the middle of a sentence.
+        self._queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=256)
+        self.dropped_frames = 0
+        self._last_drop_warning = 0.0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._stream: sd.InputStream | None = None
         self.muted = False
@@ -73,13 +79,28 @@ class Microphone:
     def _push(self, frame: np.ndarray) -> None:
         try:
             self._queue.put_nowait(frame)
+            return
         except asyncio.QueueFull:
-            # Under load we'd rather drop the oldest frame than stall capture.
-            try:
-                self._queue.get_nowait()
-                self._queue.put_nowait(frame)
-            except asyncio.QueueEmpty:
-                pass
+            pass
+
+        # The queue is full, which means the event loop is not draining it --
+        # something is blocking. Dropping frames here is invisible to every
+        # layer above: Whisper simply receives a sentence with holes in it and
+        # transcribes the fragments, and it looks like poor recognition rather
+        # than lost audio. So it is counted and reported.
+        self.dropped_frames += 1
+        now = time.monotonic()
+        if now - self._last_drop_warning > 5.0:
+            self._last_drop_warning = now
+            log.warning(
+                "microphone queue full -- dropped %d frames. The event loop is "
+                "blocked; audio is being lost and recognition will suffer.",
+                self.dropped_frames)
+        try:
+            self._queue.get_nowait()
+            self._queue.put_nowait(frame)
+        except (asyncio.QueueEmpty, asyncio.QueueFull):
+            pass
 
     # ── consumption ────────────────────────────────────────────────
     async def frames(self):

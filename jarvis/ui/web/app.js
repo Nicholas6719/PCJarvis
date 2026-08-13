@@ -96,6 +96,12 @@ function setState(s) {
 }
 
 /* ── events from Python ──────────────────────────────────────── */
+/* The engine sends batches, coalesced at 30Hz by a writer thread, so the page
+   never blocks the audio pipeline and never falls behind it. */
+window.onJarvisBatch = function (batch) {
+  for (const ev of batch) window.onJarvis(ev);
+};
+
 window.onJarvis = function (ev) {
   switch (ev.type) {
     case 'state':
@@ -119,6 +125,20 @@ window.onJarvis = function (ev) {
       reactor.setBootProgress(1);
       hideBoot();
       addActivity('all systems online', 'ok');
+      break;
+
+    case 'levels':
+      micLevel = ev.mic || 0;
+      outLevel = ev.out || 0;
+      reactor.setLevels(micLevel, outLevel);
+      break;
+
+    case 'telemetry':
+      setGauge('cpu', ev.cpu, `${Math.round(ev.cpu)}%`);
+      setGauge('mem', ev.mem, `${Math.round(ev.mem)}%`);
+      if (ev.battery != null) {
+        setGauge('bat', ev.battery, `${ev.battery}%${ev.charging ? '+' : ''}`);
+      }
       break;
 
     case 'wake.detected':
@@ -266,28 +286,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
 });
 
-/* ── polling ─────────────────────────────────────────────────── */
-setInterval(async () => {
-  if (!api()) return;
-  try {
-    const l = await api().levels();
-    micLevel = l.mic || 0;
-    outLevel = l.out || 0;
-    reactor.setLevels(micLevel, outLevel);
-  } catch (_) { /* backend still booting */ }
-}, 60);
-
-setInterval(async () => {
-  if (!api()) return;
-  try {
-    const s = await api().telemetry();
-    setGauge('cpu', s.cpu, `${Math.round(s.cpu)}%`);
-    setGauge('mem', s.mem, `${Math.round(s.mem)}%`);
-    if (s.battery != null) {
-      setGauge('bat', s.battery, `${s.battery}%${s.charging ? '+' : ''}`);
-    }
-  } catch (_) { /* not up yet */ }
-}, 2500);
+/* ── no polling ──────────────────────────────────────────────────
+   Levels and telemetry are pushed from Python on the writer thread.
+   The page used to poll api().levels() every 60ms, which meant sixteen
+   blocking round trips a second competing with the audio pipeline for
+   the same bridge. Push-only is both smoother and cheaper. */
 
 function setGauge(id, pct, label) {
   if (pct == null || isNaN(pct)) return;
