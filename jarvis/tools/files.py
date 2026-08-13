@@ -58,7 +58,9 @@ def find_files(name: str, limit: int = 10) -> str:
                 break
 
     if not found:
-        return f"No files matching {name}."
+        where = ", ".join(str(r) for r in _roots())
+        return (f"No files matching {name}. I searched "
+                f"{where or 'no folders -- none are configured'}.")
 
     found.sort(key=lambda x: -x[0])  # most recently modified first
     lines = [f"Found {len(found)} file(s) matching {name}:"]
@@ -71,6 +73,47 @@ def find_files(name: str, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
+def _looks_binary(raw: bytes) -> bool:
+    """A file whose bytes are not text.
+
+    Reading one with errors="replace" produces pages of replacement characters,
+    which the model will then happily summarise as though it were prose. A null
+    byte is conclusive; a high proportion of control characters is close enough.
+    """
+    if b"\x00" in raw:
+        return True
+    if not raw:
+        return False
+    control = sum(1 for b in raw if b < 9 or 14 <= b < 32)
+    return control / len(raw) > 0.05
+
+
+def _resolve(path: str) -> tuple[Path | None, str, int]:
+    """Find the file he meant. Returns (path, how_it_was_found, n_candidates).
+
+    The disclosure matters: asked to read "notes.txt", an earlier version would
+    quietly read whichever notes.txt it happened to find first and report the
+    contents as though there had been no ambiguity at all.
+    """
+    p = Path(path).expanduser()
+    if p.exists():
+        return p, "exact", 1
+
+    matches: list[Path] = []
+    for root in _roots():
+        try:
+            matches.extend(root.rglob(p.name))
+        except OSError:
+            continue
+        if len(matches) > 20:
+            break
+    if not matches:
+        return None, "missing", 0
+
+    matches.sort(key=lambda m: -m.stat().st_mtime if m.exists() else 0)
+    return matches[0], "searched", len(matches)
+
+
 @tool(category="files")
 def read_file(path: str, max_chars: int = 3000) -> str:
     """Read the contents of a text file.
@@ -79,30 +122,46 @@ def read_file(path: str, max_chars: int = 3000) -> str:
         path: Full path to the file, or a filename to search for.
         max_chars: Maximum characters to return.
     """
-    p = Path(path).expanduser()
-    if not p.exists():
-        # Fall back to searching for it by name.
-        for root in _roots():
-            matches = list(root.rglob(p.name))
-            if matches:
-                p = matches[0]
-                break
-        else:
-            return f"I can't find {path}."
+    resolved, how, count = _resolve(path)
+    if resolved is None:
+        where = ", ".join(str(r) for r in _roots()) or "the configured folders"
+        return f"I can't find {path}. I looked in {where}."
 
-    if p.is_dir():
-        return f"{p.name} is a folder, not a file."
-    if p.suffix.lower() not in TEXT_SUFFIXES:
-        return f"{p.name} is not a readable text file."
+    if resolved.is_dir():
+        return f"{resolved.name} is a folder, not a file."
+
+    # Say which file this actually is whenever it was not the one named.
+    preamble = ""
+    if how == "searched":
+        preamble = f"(That name matched {count} file(s); this is {resolved}.)\n"
 
     try:
-        text = p.read_text(encoding="utf-8", errors="replace")
+        raw = resolved.read_bytes()
     except Exception as e:
-        return f"Could not read {p.name}: {e}"
+        return f"Could not read {resolved.name}: {e}"
 
-    truncated = len(text) > max_chars
-    return (f"Contents of {p.name}:\n{text[:max_chars]}"
-            + ("\n[truncated]" if truncated else ""))
+    if not raw.strip():
+        return f"{preamble}{resolved.name} is empty -- there is nothing in it."
+
+    if _looks_binary(raw) or resolved.suffix.lower() not in TEXT_SUFFIXES:
+        size = len(raw)
+        return (f"{preamble}{resolved.name} is not a readable text file "
+                f"({size/1024:.0f} KB of binary data), so I can't read it out.")
+
+    try:
+        text = raw.decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"Could not decode {resolved.name}: {e}"
+
+    total = len(text)
+    if total > max_chars:
+        # Quantified, so a summary of part of a file is never mistaken for a
+        # summary of the whole thing.
+        return (f"{preamble}Contents of {resolved.name} "
+                f"(first {max_chars} of {total} characters):\n"
+                f"{text[:max_chars]}\n"
+                f"[truncated -- {total - max_chars} characters not shown]")
+    return f"{preamble}Contents of {resolved.name} ({total} characters):\n{text}"
 
 
 @tool(category="files")
@@ -125,7 +184,8 @@ def list_recent_files(count: int = 10) -> str:
                     pass
 
     if not found:
-        return "No recent files found."
+        where = ", ".join(str(r) for r in _roots())
+        return f"No files found in {where or 'any configured folder'}."
     found.sort(key=lambda x: -x[0])
     lines = ["Most recently modified:"]
     for mtime, p in found[:max(1, min(int(count), 25))]:
@@ -140,17 +200,15 @@ def open_file(path: str) -> str:
     Args:
         path: Full path, or a filename to search for.
     """
-    p = Path(path).expanduser()
-    if not p.exists():
-        for root in _roots():
-            matches = list(root.rglob(p.name))
-            if matches:
-                p = matches[0]
-                break
-        else:
-            return f"I can't find {path}."
+    resolved, how, count = _resolve(path)
+    if resolved is None:
+        where = ", ".join(str(r) for r in _roots())
+        return f"I can't find {path}. I looked in {where}."
     try:
-        os.startfile(str(p))
-        return f"Opened {p.name}."
+        os.startfile(str(resolved))
     except Exception as e:
-        return f"Could not open {p.name}: {e}"
+        return f"Could not open {resolved.name}: {e}"
+    if how == "searched" and count > 1:
+        return (f"Opened {resolved.name}. That name matched {count} files; "
+                f"I opened the most recent one.")
+    return f"Opened {resolved.name}."

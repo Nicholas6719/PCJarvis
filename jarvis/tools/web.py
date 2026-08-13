@@ -6,6 +6,7 @@ rule throughout: results are summarized for speech, never dumped verbatim.
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -16,6 +17,38 @@ log = logging.getLogger("jarvis.tools.web")
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " \
      "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+
+# Extraction frequently "succeeds" on a consent wall, and a summary of a cookie
+# notice presented as the article is worse than an outright failure.
+_CONSENT = ("we and our partners", "accept all cookies", "cookie policy",
+            "manage preferences", "privacy preferences", "enable javascript",
+            "please enable cookies", "verify you are human",
+            "checking your browser", "consent to the use of cookies")
+
+_STOP = {"the", "a", "an", "of", "for", "and", "in", "on", "to", "is",
+         "what", "how", "why", "latest", "news", "about", "any"}
+
+
+def _looks_like_consent(text: str) -> bool:
+    head = text[:900].lower()
+    return sum(1 for phrase in _CONSENT if phrase in head) >= 2
+
+
+def _relevance(query: str, results: list) -> float:
+    """How much of the query actually appears in the results.
+
+    A search engine always returns something. For a query it does not
+    understand it returns confident, well-formatted, entirely unrelated pages,
+    which then get relayed as findings. This measures whether the results have
+    anything to do with what was asked.
+    """
+    terms = {w for w in re.findall(r"[a-z0-9]+", query.lower())
+             if len(w) > 2 and w not in _STOP}
+    if not terms:
+        return 1.0
+    blob = " ".join(f"{r.get('title', '')} {r.get('body', '')}"
+                    for r in results).lower()
+    return sum(1 for t in terms if t in blob) / len(terms)
 
 
 @tool(category="web", speak_while_running=True)
@@ -41,10 +74,24 @@ def web_search(query: str, count: int = 5) -> str:
         # Deliberately unnumbered and terse. A numbered list invites him to read
         # the list out, and a spoken numbered list is unbearable -- the answer
         # should be two sentences synthesised from these, not a recital.
-        lines = [
-            f"Search findings for '{query}' (summarise these in one or two "
-            f"spoken sentences; do NOT list them):"
-        ]
+        # Verified, not assumed. A search engine always returns something; if
+        # what came back has nothing to do with the question, say so rather
+        # than dressing it up as an answer.
+        match = _relevance(query, results)
+        if match < 0.34:
+            return (f"I searched for '{query}' and nothing relevant came back "
+                    f"-- the results are about other things entirely. Tell him "
+                    f"you could not find anything on this. Do NOT answer from "
+                    f"the titles below.\n"
+                    + "\n".join(f"- {r.get('title', '')}" for r in results[:3]))
+
+        header = (f"Search findings for '{query}' (summarise these in one or "
+                  f"two spoken sentences; do NOT list them):")
+        if match < 0.7:
+            header += ("\n[only a partial match for the query -- say so if the "
+                       "answer looks thin]")
+
+        lines = [header]
         for r in results:
             body = (r.get("body") or "").strip().replace("\n", " ")
             lines.append(f"- {r.get('title', '')}: {body[:200]}")
@@ -69,15 +116,43 @@ def read_webpage(url: str) -> str:
             r = client.get(url)
             r.raise_for_status()
             html = r.text
+            final_url = str(r.url)
 
         import trafilatura
         text = trafilatura.extract(html, include_comments=False,
                                    include_tables=False, favor_precision=True)
-        if not text:
-            return "I couldn't extract readable text from that page."
-        return f"Content of {url}:\n{text[:3500]}"
+        if not text or not text.strip():
+            return (f"I fetched {final_url} but could not extract any readable "
+                    f"text from it. It may be a login wall, a consent page, or "
+                    f"rendered entirely in JavaScript.")
+
+        text = text.strip()
+        # A redirect can silently land somewhere else entirely -- a login page,
+        # a regional homepage. Say so rather than summarising the wrong thing.
+        moved = ""
+        if final_url.rstrip("/") != url.rstrip("/"):
+            moved = f" (redirected from {url})"
+
+        # Some pages "extract" successfully into a cookie banner. Summarising
+        # that as the article is the failure this guard exists to prevent.
+        if len(text) < 400:
+            return (f"I fetched {final_url}{moved}, but there is very little "
+                    f"readable text on it -- only {len(text)} characters, which "
+                    f"is probably a banner or a stub rather than an article. "
+                    f"Here is all of it:\n{text}")
+
+        if _looks_like_consent(text):
+            return (f"I fetched {final_url}{moved}, but what came back reads "
+                    f"like a cookie or consent notice rather than the article "
+                    f"itself:\n{text[:600]}")
+
+        body = text[:3500]
+        note = ("" if len(text) <= 3500
+                else f"\n[showing the first 3500 of {len(text)} characters]")
+        return f"Content of {final_url}{moved} ({len(text)} characters):\n{body}{note}"
     except httpx.HTTPStatusError as e:
-        return f"That page returned {e.response.status_code}."
+        return (f"That page returned {e.response.status_code}, so I could not "
+                f"read it.")
     except Exception as e:
         return f"Could not read that page: {e}"
 
