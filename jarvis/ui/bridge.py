@@ -46,6 +46,15 @@ class UIChannel:
         self._thread: threading.Thread | None = None
         self._last_telemetry = 0.0
         self._dropped = 0
+        # Window operations are queued, not performed by the caller.
+        # minimize/restore/toggle_fullscreen each marshal onto the UI thread
+        # with Invoke, and so does evaluate_js -- two threads racing for the
+        # same UI thread, one of them at 30Hz, is a crash waiting to happen.
+        # Exactly one thread touches the window: this one.
+        self._ops: queue.Queue = queue.Queue()
+        self.minimized = False
+        self.want_fullscreen = True
+        self.fullscreen_active = True
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._pump, daemon=True,
@@ -69,6 +78,11 @@ class UIChannel:
             if self._dropped % 100 == 1:
                 log.warning("UI queue full; dropped %d events", self._dropped)
 
+    def window_op(self, name: str) -> None:
+        """Queue a window operation for the writer thread to perform."""
+        if not self._closing:
+            self._ops.put(name)
+
     def set_levels(self, mic: float, out: float) -> None:
         """Replace the current meter reading. Never queues -- always latest."""
         with self._levels_lock:
@@ -86,10 +100,40 @@ class UIChannel:
             elapsed = time.monotonic() - started
             time.sleep(max(0.0, interval - elapsed))
 
+    def _perform(self, window, op: str) -> None:
+        """Run one window operation. Only ever called from the writer thread."""
+        if op == "minimize":
+            window.minimize()
+            self.minimized = True
+            self.fullscreen_active = False   # Windows drops the style
+            log.info("minimised to wake mode")
+        elif op == "restore":
+            if self.minimized:
+                window.restore()
+                self.minimized = False
+            if self.want_fullscreen and not self.fullscreen_active:
+                window.toggle_fullscreen()
+                self.fullscreen_active = True
+            log.info("restored to the foreground")
+        elif op == "toggle_fullscreen":
+            window.toggle_fullscreen()
+            self.fullscreen_active = not self.fullscreen_active
+
     def _flush(self) -> None:
         window = self._window()
         if window is None:
             return
+
+        # Window state first, and never interleaved with a JS call.
+        while True:
+            try:
+                op = self._ops.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                self._perform(window, op)
+            except Exception:
+                log.warning("window op %r failed", op, exc_info=True)
 
         batch: list[dict] = []
         for _ in range(MAX_BATCH):

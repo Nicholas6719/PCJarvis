@@ -95,7 +95,26 @@ def main() -> int:
     # it for being integrated unless this is present -- the difference between
     # inference on the GPU and on the CPU.
     os.environ.setdefault("OLLAMA_IGPU_ENABLE", "1")
-    os.environ.setdefault("OLLAMA_KEEP_ALIVE", "30m")
+    # Memory settings, all measured on this machine. The 780M takes its VRAM
+    # out of system RAM, so the model costs roughly 8 GB of a 15 GB laptop --
+    # these keep that from becoming the whole machine.
+    os.environ.setdefault("OLLAMA_KEEP_ALIVE", "15m")
+    os.environ.setdefault("OLLAMA_MAX_LOADED_MODELS", "1")
+    os.environ.setdefault("OLLAMA_NUM_PARALLEL", "1")
+    os.environ.setdefault("OLLAMA_FLASH_ATTENTION", "1")
+    os.environ.setdefault("OLLAMA_KV_CACHE_TYPE", "q8_0")
+
+    # Reclaim anything a previous run leaked before starting a new server,
+    # otherwise the machine can be several gigabytes down before we begin.
+    try:
+        from jarvis.health import reap_orphaned_model_hosts
+
+        killed, freed = reap_orphaned_model_hosts()
+        if killed:
+            print(f"reclaimed {freed:.1f} GB from {killed} orphaned "
+                  f"model host(s)")
+    except Exception:
+        pass
 
     if not start_ollama():
         message_box(
@@ -116,6 +135,7 @@ def main() -> int:
             quiet = "--quiet" in sys.argv
             say = None
             ask = None
+            selftest = "--selftest" in sys.argv
 
         return run_windowed(Args())
 

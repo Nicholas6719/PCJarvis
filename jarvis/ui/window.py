@@ -66,15 +66,11 @@ class Api:
 
     def toggle_fullscreen(self) -> bool:
         """F11 / the maximise button. Returns the new state."""
-        if self._bridge.window:
-            self._bridge.window.toggle_fullscreen()
-            self._bridge._is_fullscreen = not self._bridge._is_fullscreen
-            self._bridge.fullscreen = self._bridge._is_fullscreen
-        return self._bridge._is_fullscreen
+        self._bridge.channel.window_op("toggle_fullscreen")
+        return not self._bridge.channel.fullscreen_active
 
     def minimize(self) -> None:
-        if self._bridge.window:
-            self._bridge.window.minimize()
+        self._bridge.channel.window_op("minimize")
 
     def quit(self) -> None:
         self._bridge.stop()
@@ -95,6 +91,8 @@ class Bridge:
         self._is_fullscreen = self.fullscreen
         self._minimized = False
         self.channel = UIChannel(lambda: self.window, lambda: self.app)
+        self.channel.want_fullscreen = bool(CONFIG.get("ui.fullscreen", True))
+        self.channel.fullscreen_active = self.channel.want_fullscreen
 
     # ── loop thread ────────────────────────────────────────────────
     def start(self) -> None:
@@ -129,6 +127,11 @@ class Bridge:
 
         self._ready.set()
         self.push("ready", await asyncio.to_thread(lambda: {}))
+
+        if getattr(self.args, "selftest", False):
+            await self._selftest()
+            return
+
         await self.app.run(greet=not self.args.quiet)
 
     # ── bus -> page ────────────────────────────────────────────────
@@ -158,37 +161,52 @@ class Bridge:
         if self.app and self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.app.handle(text), self.loop)
 
+    async def _selftest(self) -> None:
+        """Hammer the window transitions that crashed, against the real
+        WebView2, while the writer thread is pushing at 30Hz."""
+        import time as _time
+
+        log.info("SELFTEST: exercising window transitions")
+        failures = 0
+        for cycle in range(4):
+            try:
+                # Keep the UI busy so the two threads genuinely contend.
+                for i in range(20):
+                    self.push("selftest", {"cycle": cycle, "i": i})
+
+                self.minimize()
+                await asyncio.sleep(1.2)
+                self.restore()
+                await asyncio.sleep(1.2)
+                log.info("SELFTEST: cycle %d survived", cycle + 1)
+            except Exception:
+                failures += 1
+                log.exception("SELFTEST: cycle %d FAILED", cycle + 1)
+
+        # And the state the interface reports must match reality.
+        log.info("SELFTEST: minimized=%s fullscreen_active=%s",
+                 self.channel.minimized, self.channel.fullscreen_active)
+        log.info("SELFTEST: %s",
+                 "PASSED -- no crash across 4 minimise/restore cycles"
+                 if failures == 0 else f"FAILED with {failures} errors")
+        _time.sleep(0.5)
+        self.stop()
+
     # ── window control ─────────────────────────────────────────────
     def minimize(self) -> None:
-        """He has been dismissed. Get out of the way, keep listening."""
-        if self.window and not self._closing and not self._minimized:
-            try:
-                self.window.minimize()
-                self._minimized = True
-                # Windows drops the full-screen style on minimise, so the flag
-                # must drop with it -- otherwise restore believes it is still
-                # full screen and comes back as a plain window.
-                self._is_fullscreen = False
-                log.info("minimised to wake mode")
-            except Exception:
-                log.debug("minimise failed")
+        """He has been dismissed. Get out of the way, keep listening.
+
+        Queued rather than performed here: this runs on the asyncio thread,
+        and touching the window from anywhere but the UI writer thread races
+        with the 30Hz evaluate_js and takes the process down.
+        """
+        if not self._closing:
+            self.channel.window_op("minimize")
 
     def restore(self) -> None:
         """Woken. Come back full screen and to the front."""
-        if not self.window or self._closing:
-            return
-        try:
-            if self._minimized:
-                self.window.restore()
-                self._minimized = False
-            # pywebview drops full screen on restore, so re-assert it.
-            if self.fullscreen and not self._is_fullscreen:
-                self.window.toggle_fullscreen()
-                self._is_fullscreen = True
-            self.window.on_top = True
-            self.window.on_top = CONFIG.get("ui.always_on_top", False)
-        except Exception:
-            log.debug("restore failed")
+        if not self._closing:
+            self.channel.window_op("restore")
 
     def stop(self) -> None:
         self._closing = True   # stop pushing into a window that is going away

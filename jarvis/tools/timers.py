@@ -20,6 +20,10 @@ log = logging.getLogger("jarvis.tools.timers")
 
 _timers: dict[str, dict] = {}
 
+# A strong reference to every running timer task. See set_timer for why this
+# is not optional.
+_tasks: set[asyncio.Task] = set()
+
 WORD_NUMBERS = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
     "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
@@ -104,7 +108,10 @@ async def _run_timer(timer_id: str, seconds: float, label: str) -> None:
                else f"That's {_spoken(seconds)}.")
     log.info("timer elapsed: %s", message)
     # The main loop decides when to say this -- never mid-reply, never muted.
-    await BUS.emit("proactive", text=message, source="timer")
+    try:
+        await BUS.emit("proactive", text=message, source="timer")
+    except Exception:
+        log.exception("timer fired but could not be announced")
 
 
 @tool(category="timers")
@@ -129,10 +136,19 @@ async def set_timer(duration: str, label: str = "") -> str:
     }
     # This tool is async precisely so it runs on the main event loop. Sync tools
     # execute on a worker thread via asyncio.to_thread, where there is no running
-    # loop, and the timer could never be scheduled -- it failed on every single
-    # call while cheerfully reporting that the timer was set.
-    asyncio.get_running_loop().create_task(
+    # loop, and the timer could never be scheduled.
+    #
+    # The reference MUST be kept. asyncio holds only a weak reference to a
+    # running task, so a task nobody else refers to can be garbage collected
+    # mid-await and simply vanish -- no error, no warning, the timer just
+    # never goes off. In a short test run the collector never gets around to
+    # it and everything looks fine; in a long-lived session under memory
+    # pressure it disappears. This is the whole bug.
+    task = asyncio.get_running_loop().create_task(
         _run_timer(timer_id, seconds, label.strip()))
+    _timers[timer_id]["task"] = task
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
 
     return (f"Timer set for {_spoken(seconds)}"
             + (f", for the {label.strip()}." if label.strip() else "."))
@@ -166,8 +182,13 @@ def cancel_timer(label: str = "") -> str:
         if not match:
             return f"I don't have a timer for {label}."
         for t in match:
-            _timers.pop(t["id"], None)
+            entry = _timers.pop(t["id"], None)
+            if entry and entry.get("task"):
+                entry["task"].cancel()
         return f"Cancelled the {label} timer."
     count = len(_timers)
+    for entry in _timers.values():
+        if entry.get("task"):
+            entry["task"].cancel()
     _timers.clear()
     return "Timer cancelled." if count == 1 else f"Cancelled all {count} timers."

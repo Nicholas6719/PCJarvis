@@ -34,6 +34,7 @@ from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
 from jarvis.config import CONFIG, LOGS_DIR  # noqa: E402
+from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
 from jarvis.tools import documents, memory_tools, registry  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
@@ -115,6 +116,17 @@ class Jarvis:
         log.info("=" * 58)
         log.info(" J.A.R.V.I.S.  initialising")
         log.info("=" * 58)
+
+        # Before anything heavy loads: reclaim memory a previous run leaked.
+        # Ollama orphans its llama-server child on restart or crash, and each
+        # orphan keeps holding ~4 GB. They accumulate until a launch fails,
+        # which orphans another one.
+        state = health.startup_check()
+        if state.get("orphans_killed"):
+            await BUS.emit("boot", step=f"reclaimed "
+                                        f"{state['reclaimed_gb']:.1f} GB")
+        self.memory_state = state
+
         log.info("%d tools registered", registry.load_all())
 
         self.memory = Memory(self.cfg)

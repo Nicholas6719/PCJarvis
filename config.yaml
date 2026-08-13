@@ -55,7 +55,7 @@ llm:
   temperature: 0.6
   num_predict: 120               # spoken replies are short; caps runaway generation
   num_ctx: 4096                  # our prompt is ~1500 tok; smaller = less KV, faster
-  keep_alive: 30m                # keep weights resident between turns
+  keep_alive: 15m                # shorter: the model costs ~8GB of a 15GB laptop
   max_tool_iterations: 6         # safety rail on the tool loop
   history_turns: 12              # conversational memory held in context
   fast_path_words: 8             # short, keyword-free chit-chat skips the tools
