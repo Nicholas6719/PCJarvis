@@ -60,6 +60,11 @@ FAST_PATH_BLOCKERS = {
     # memory
     "remember", "forget", "recall", "my", "mine", "playing", "song", "music",
     "spotify", "track", "playlist",
+    # command vocabulary -- belt and braces behind the ordering fix above
+    "timer", "countdown", "alarm", "second", "seconds", "minute",
+    "minutes", "hour", "hours", "remind", "cancel", "screenshot",
+    "youtube", "github", "reddit", "gmail", "downloads", "desktop",
+    "directions", "brightness", "volume", "battery", "cpu", "disk",
 }
 
 
@@ -271,15 +276,14 @@ class Brain:
         yield Event("done", text=final)
 
     async def respond(self, user_text: str) -> AsyncIterator[Event]:
-        # Short, keyword-free chit-chat: no tools, no memory, last few turns.
-        if self._is_fast_path(user_text):
-            async for event in self._respond_fast(user_text):
-                yield event
-            return
-
-        # Unambiguous commands are executed directly. This is both more reliable
-        # than asking the model to recognise "skip" and considerably faster --
-        # no round trip at all. See brain/intents.py for why.
+        # ORDER MATTERS, and getting it wrong cost three rounds of "the timer
+        # still does not work". The fast path used to run first, and
+        # "10 second timer" is three words with no blocker keyword -- so it was
+        # classified as chit-chat and handed to the model, which replied
+        # "Setting a 10-second timer" and set nothing at all.
+        #
+        # Deterministic first. Always. The fast path only ever sees what the
+        # intent layer has already declined.
         shortcut = intents.match(user_text)
         if shortcut:
             name, args, canned = shortcut
@@ -304,6 +308,14 @@ class Brain:
                 yield Event("sentence", text=reply)
                 yield Event("done", text=reply)
                 return
+
+        # Short, keyword-free chit-chat that no tool could improve: no tools,
+        # no memory, only the last few turns. Reached only once the intent
+        # layer has declined the utterance.
+        if self._is_fast_path(user_text):
+            async for event in self._respond_fast(user_text):
+                yield event
+            return
 
         self.history.append({"role": "user", "content": user_text})
         self._trim()

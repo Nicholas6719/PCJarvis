@@ -1,12 +1,12 @@
 # Everything JARVIS can do
 
-Say **"Hey JARVIS"**, wait for the chime, then speak. Or press **Ctrl+Alt+J**
-from any application, **Space** when the window has focus, or just type in the
-box at the bottom.
+Say **"Jarvis"** or **"Hey Jarvis"**, then speak. After he answers you can simply
+keep talking for 15 seconds — no wake word. **Ctrl+Alt+J** from any application,
+**Space** when the window has focus, or type in the box.
 
-Phrasing is flexible — these are examples, not magic words. Anything in the
-**Instant** column bypasses the language model entirely and runs in well under a
-second.
+**Bold** commands are *instant* — they never touch the language model, so they
+answer in well under a second and their readings cannot be reworded into
+something untrue.
 
 ---
 
@@ -14,188 +14,138 @@ second.
 
 | | |
 |---|---|
-| **"Hey JARVIS"** | Wake word |
-| **Ctrl+Alt+J** | Wake him from any app, no speaking required |
-| **Space** | Push to talk (when the window has focus) |
-| **F11** | Full screen on/off |
-| **Esc** | Cut him off mid-sentence |
-| **Talk / Stop / Mic** buttons | Same three things, by mouse |
-| Talking over him | Interrupts immediately |
+| "Jarvis" / "Hey Jarvis" | Wake word |
+| Ctrl+Alt+J | Wake from any app |
+| Space | Push to talk |
+| F11 | Full screen |
+| Esc | Cut him off |
+| Say "Jarvis" over him | Interrupts mid-sentence |
+| "That's all" / "go to sleep" | Dismiss — he minimises and waits |
 
 ---
 
 ## Instant commands
 
-These are matched in code, so they always work and never wait on the model.
+### Timers
+**"10 second timer"** · **"20 minute timer"** · **"set a timer for half an hour"**
+· **"remind me in 5 minutes"** · **"how long is left?"** · **"cancel the timer"**
 
-| Say | What happens |
-|---|---|
-| "Pause" · "Pause the music" | Pauses whatever is playing |
-| "Resume" · "Unpause" | Resumes |
-| "Skip" · "Next" · "Skip this track" | Next track |
-| "Previous" · "Go back" | Previous track |
-| "What's playing?" | Reports the current track |
-| "Volume 40" · "Set volume to 70" | Sets volume |
-| "Mute" · "Unmute" | Mutes system audio |
-| "Lock my screen" | Locks Windows |
-| "Take a screenshot" | Saves to Pictures\JARVIS |
-| "Remember that ..." | Stores a fact permanently |
+He speaks up when it elapses, and waits politely if he's mid-sentence.
+
+### System
+**"What's my battery?"** · **"am I charging?"** · **"what's my CPU?"** ·
+**"how much memory am I using?"** · **"how much disk space is left?"** ·
+**"system status"** · **"what time is it?"** · **"what's my uptime?"** ·
+**"am I online?"** · **"what's using all my CPU?"**
+
+Each answers *only* what was asked — the CPU question gives you the CPU.
+
+### Audio and screen
+**"Turn it up"** · **"turn it down"** · **"louder"** · **"quieter"** ·
+**"volume 40"** · **"mute"** · **"unmute"** · **"brighter"** · **"dimmer"** ·
+**"take a screenshot"** · **"lock my screen"**
+
+### Media
+**"Pause"** · **"resume"** · **"skip"** · **"previous"** · **"what's playing?"**
+
+### Opening things
+**"Open YouTube"** · **"go to GitHub"** · **"open my downloads"** ·
+**"search YouTube for Iron Man"** · **"directions to Boston"**
+
+Anything opened is brought to the front.
+
+### Weather
+**"What's the weather?"** · **"what's the weather in Boston?"** ·
+**"is it going to rain?"**
+
+### Memory and notes
+**"Remember that I use Brave"** · **"note that the router needs rebooting"** ·
+**"read my notes"** · **"what can you do?"**
+
+Memory is for facts about you that shape later answers. Notes are jottings you
+read back.
 
 ---
 
-## System
+## Through the model
+
+Slower (2–5s), because they need actual thinking:
 
 | Ask | Example |
 |---|---|
-| System status | *"How's my system doing?"* · *"What's my CPU at?"* |
-| Battery | *"How much battery do I have?"* · *"Am I charging?"* |
-| Memory / disk | *"How much RAM am I using?"* · *"How much disk space is left?"* |
-| Time and date | *"What time is it?"* · *"What's today's date?"* |
-| Open apps | *"Open Spotify"* · *"Launch VS Code"* · *"Open Brave"* |
-| Close apps | *"Close Notepad"* · *"Quit Spotify"* |
-| Windows | *"What have I got open?"* · *"Switch to Brave"* |
-| Volume | *"Turn it down"* · *"What's the volume?"* |
-| Brightness | *"Set brightness to 50"* · *"Dim the screen"* |
-| Clipboard | *"What's on my clipboard?"* · *"Copy this to my clipboard: ..."* |
-| Screenshot | *"Take a screenshot"* |
-| Power | *"Lock the screen"* · *"Go to sleep"* · *"Restart"* |
-
-He knows these app names out of the box: Spotify, VS Code, Brave, Chrome,
-Explorer, Task Manager, Terminal, PowerShell, Notepad, Calculator, Settings,
-Paint, Snipping Tool, Camera. Anything else he looks up in the Start Menu, so
-*"Open Steam"* works if Steam is installed.
+| Web search | *"Search the web for the new Ryzen chips"* |
+| Read a page | *"Summarise this article: ..."* |
+| News | *"Any tech news today?"* |
+| Files | *"Find my resume"* · *"what have I been working on?"* |
+| Documents | *"Create a PDF of our conversation on my desktop"* |
+| Recall | *"What's my main browser?"* |
+| Apps | *"Open Spotify"* · *"close Notepad"* |
+| Clipboard | *"What's on my clipboard?"* |
+| Anything else | *"Explain quantum computing"* |
 
 ---
 
-## Web
+## Documents
 
-Needs internet. Everything else on this page works offline.
+*"Create a PDF of our conversation"* · *"...and put it on my desktop"* ·
+*"make a PDF titled Project Notes about ..."* · *"save that as a text file"*
 
-| Ask | Example |
-|---|---|
-| Search | *"Search the web for the new Ryzen chips"* · *"Look up X"* |
-| Current events | *"What's happening with AMD?"* |
-| Read a page | *"Read me that article at ..."* · *"Summarise this URL: ..."* |
-| Weather | *"What's the weather?"* · *"What's the forecast in Boston?"* |
-| News | *"Any news today?"* · *"Give me the tech headlines"* |
-
-Weather uses your location automatically if you don't name a city.
+Files go to `Documents\JARVIS` unless you say desktop or downloads, and he
+confirms from the file that is actually on disk — never from having meant to.
 
 ---
 
-## Files
+## Asks first
 
-Searches your Documents, Desktop and Downloads.
+*"Shut down"* · *"restart"* · *"put the computer to sleep"* ·
+*"run this PowerShell command"*
 
-| Ask | Example |
-|---|---|
-| Find | *"Find my resume"* · *"Where's that config file?"* |
-| Read | *"Read me the top of my notes file"* |
-| Recent | *"What have I been working on?"* · *"Show me recent files"* |
-| Open | *"Open my budget spreadsheet"* |
-
----
-
-## Media
-
-Works with Spotify, browsers, any player — through the same channel as your
-keyboard's media keys. No account linking, no API key.
-
-| Ask | Example |
-|---|---|
-| Transport | *"Pause"* · *"Skip"* · *"Go back"* · *"Resume"* |
-| Now playing | *"What's this song?"* · *"What's playing?"* |
-| Find music | *"Find Led Zeppelin on Spotify"* (opens the search) |
-
-**One real limit:** he cannot start a *specific* song by name. SMTC has no such
-call, and doing it properly needs a Spotify account link. *"Play Back in Black"*
-opens the search, ready to hit play.
-
----
-
-## Memory
-
-Persists in SQLite, survives restarts and reboots.
-
-| Ask | Example |
-|---|---|
-| Remember | *"Remember that I use Brave as my main browser"* |
-| | *"Remember my sister's birthday is in March"* |
-| Recall | *"What's my main browser?"* · *"What do you know about me?"* |
-| Forget | *"Forget what I said about the browser"* |
-
-Memory is a tool he *calls*, not context he's fed — that's what keeps replies at
-two seconds. Occasionally he'll need a direct question (*"what do you know about
-X"*) rather than an oblique one.
-
----
-
-## Things that ask first
-
-These require you to say **yes** out loud before they run:
-
-- *"Shut down the computer"* · *"Restart"*
-- *"Go to sleep"*
-- *"Run this PowerShell command: ..."*
-
-He'll ask, then wait. Say *"yes"*, *"do it"*, or *"go ahead"* — or *"cancel"* /
-*"never mind"* to drop it. Say *"cancel shutdown"* to stop a countdown already
-running.
-
----
-
-## Chaining
-
-He can do several things in one breath:
-
-> *"What's my battery at, pause the music, and tell me the weather"*
-
-> *"Take a screenshot and tell me how much disk space I've got left"*
+Say "yes" or "cancel". Note that **"go to sleep" means JARVIS**, not the laptop —
+suspending the machine requires saying "the computer".
 
 ---
 
 ## Reading the reactor
 
-The interface tells you what he's doing without you reading a word:
-
 | Look | State |
 |---|---|
-| Slow cyan breathing | Idle, listening for the wake word |
-| Teal, ring reacting to your voice | Listening to you |
-| Blue, fast counter-rotation, particles pulling in | Thinking |
-| Violet, a scanner sweeping the dial | Running a tool |
-| **Gold, pulsing to his voice** | Speaking |
-| Red | Something went wrong |
+| Slow cyan breathing | Idle, waiting for the wake word |
+| Teal, ring reacting to you | Listening |
+| Blue, fast counter-rotation | Thinking |
+| Violet, sweeping scanner | Running a tool |
+| **Gold, pulsing** | Speaking |
+| Red | Fault |
 
-The **SYSTEM ACTIVITY** panel logs every tool call as it happens, so nothing he
-does is hidden.
-
----
-
-## Worth testing first
-
-A quick pass that touches every subsystem:
-
-1. *"Hey JARVIS, what's my battery at?"* — wake word, tools, voice
-2. *"Pause the music"* with Spotify playing — instant path
-3. *"Remember that my favourite film is Iron Man"* — then restart the app and
-   ask *"what's my favourite film?"* — persistence
-4. **Turn off Wi-Fi**, then *"what's my CPU usage?"* — proves it's fully local
-5. Wi-Fi back on: *"search the web for Ryzen AI news"*
-6. Interrupt him mid-sentence — barge-in
-7. **F11** — full screen
+The bar under the reactor is the conversation window: while it's counting down,
+just keep talking.
 
 ---
 
-## If something misbehaves
+## A five-minute test pass
 
-`logs\jarvis.log` records every stage. Useful lines:
+1. *"Jarvis"* → *"10 second timer"* — instant, and it goes off
+2. Without the wake word: *"what's my battery?"* — should say plugged in
+3. *"What's my CPU?"* — CPU only, not everything
+4. *"Turn it down"* · *"what's the weather?"* · *"what can you do?"*
+5. *"Create a PDF of our conversation on my desktop"* — then look
+6. Ask something long, say *"Jarvis"* over him — he stops dead
+7. *"No, go to sleep"* — **JARVIS** sleeps, laptop doesn't. Then wake him:
+   full screen.
 
-- `wake word fired (0.87)` — he heard you
-- `woke but heard no speech in 6.0s` — he woke but the microphone gave him
-  nothing usable
-- `heard: ...` — what he actually transcribed
-- `tool get_battery({}) -> ...` — the tool and its real result
+---
 
-If he wakes too easily or not easily enough, change `wake.threshold` in
-`config.yaml` — lower catches more, higher rejects more.
+## When something is wrong
+
+`logs\jarvis.log`:
+
+- `intent: '...' -> tool(...)` — took the instant path
+- `heard: ...` — exactly what he transcribed
+- `dropped N frames` — the event loop is blocking; **tell me**
+- `woke but heard no speech in 6.0s` — woke, mic gave nothing
+- `LISTENER DIED` — capture loop crashed
+
+Run the suites yourself:
+
+```bash
+.\.venv\Scripts\python.exe scripts\e2e.py
+```

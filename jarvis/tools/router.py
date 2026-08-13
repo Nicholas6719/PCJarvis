@@ -91,6 +91,22 @@ EXTRAS: dict[str, set[str]] = {
     "list_timers":         {"timers", "how long left", "time remaining"},
     "cancel_timer":        {"cancel the timer", "stop the timer",
                             "cancel timer", "forget the timer"},
+
+    # ── relative controls, machine facts, notes, help ──
+    "adjust_volume":       {"louder", "quieter", "turn it up",
+                            "turn it down", "turn up", "turn down"},
+    "adjust_brightness":   {"brighter", "dimmer", "dim"},
+    "get_network_status":  {"wifi", "internet", "online", "network",
+                            "connected"},
+    "get_uptime":          {"uptime", "how long has", "since i restarted",
+                            "been running"},
+    "get_top_processes":   {"using the most", "heaviest", "what is using",
+                            "hogging", "top processes"},
+    "add_note":            {"note that", "make a note", "jot"},
+    "read_notes":          {"my notes", "read my notes", "what notes"},
+    "list_capabilities":   {"what can you do", "capabilities", "help me",
+                            "what do you do", "your abilities"},
+    "get_time_until":      {"how long until", "time until"},
 }
 
 _WORD = re.compile(r"[a-z']+")

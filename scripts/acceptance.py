@@ -70,8 +70,9 @@ def test_intents() -> None:
         ("10 second timer", "set_timer"),
         ("open youtube", "open_website"),
         ("directions to Boston", "get_directions"),
+        ("what is the weather", "get_weather"),
+        ("what's the weather in Boston", "get_weather"),
         # These genuinely need the model.
-        ("what is the weather", None),
         ("open spotify and play jazz", None),
         ("explain quantum computing", None),
         ("create a pdf of our conversation", None),

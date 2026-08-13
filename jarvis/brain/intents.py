@@ -138,6 +138,41 @@ INTENTS: list[Intent] = [
            r"(?:audio|sound|volume)?\s*[.!]?$",
            "set_mute", lambda m: {"muted": False}, reply="Unmuted."),
 
+    # ══ relative controls ══ far commoner than absolute ones
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:turn\s+(?:it\s+|the\s+volume\s+)?up|louder|volume\s+up)\s*[.!]?$",
+           "adjust_volume", lambda m: {"direction": "up"}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:turn\s+(?:it\s+|the\s+volume\s+)?down|quieter|quiet\s+down|volume\s+down)\s*[.!]?$",
+           "adjust_volume", lambda m: {"direction": "down"}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:brighter|brighten(?:\s+the\s+screen)?)\s*[.!]?$",
+           "adjust_brightness", lambda m: {"direction": "up"}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:dimmer|dim(?:\s+the\s+screen)?)\s*[.!]?$",
+           "adjust_brightness", lambda m: {"direction": "down"}),
+
+    # ══ weather ══ was 16s through the model for a single API call
+    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:the\s+)?"
+           r"(?:weather|forecast|temperature)"
+           r"(?:\s+(?:like|outside|today|right\s+now))*\s*[.?!]?$",
+           "get_weather"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:the\s+)?"
+           r"(?:weather|forecast|temperature)\s+(?:like\s+)?"
+           r"(?:in|at|for)\s+(?P<place>[\w\s.'-]+?)\s*[.?!]?$",
+           "get_weather",
+           lambda m: {"location": m.group("place").strip()}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:is\s+it\s+)?(?:going\s+to\s+)?"
+           r"rain(?:ing)?(?:\s+today)?\s*[.?!]?$", "get_weather"),
+
+    # ══ machine facts ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:am\s+i\s+online|is\s+(?:the\s+)?(?:wifi|internet)\s+(?:on|working|up)|what(?:'s| is)\s+my\s+(?:wifi|network))\s*[.?!]?$", "get_network_status"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+(?:my\s+|the\s+)?uptime|how\s+long\s+has\s+(?:the\s+)?(?:computer|machine|it)\s+been\s+(?:on|up|running))\s*[.?!]?$", "get_uptime"),
+    Intent(r"^(?:jarvis[,\s]+)?what(?:'s| is)\s+(?:using|eating|hogging)\s+(?:all\s+)?(?:my\s+|the\s+)?(?:cpu|memory|ram|resources)\s*[.?!]?$", "get_top_processes"),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+can\s+you\s+do\s*[.?!]?$",
+           "list_capabilities"),
+
+    # ══ notes ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:make\s+a\s+note|note)(?:\s+that)?\s+(?P<text>.+)$",
+           "add_note", lambda m: {"text": m.group("text").strip()}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:read|what\s+are)\s+my\s+notes\s*[.?!]?$", "read_notes"),
+
     # ══ opening things ══
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:open|show|go to)\s+"
            r"(?:my\s+|the\s+)?(?P<folder>downloads|documents|desktop|pictures|"
