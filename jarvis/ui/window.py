@@ -90,8 +90,9 @@ class Api:
         """F11 / the maximise button. Returns the new state."""
         if self._bridge.window:
             self._bridge.window.toggle_fullscreen()
-            self._bridge.fullscreen = not self._bridge.fullscreen
-        return self._bridge.fullscreen
+            self._bridge._is_fullscreen = not self._bridge._is_fullscreen
+            self._bridge.fullscreen = self._bridge._is_fullscreen
+        return self._bridge._is_fullscreen
 
     def minimize(self) -> None:
         if self._bridge.window:
@@ -112,7 +113,9 @@ class Bridge:
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
         self._closing = False
-        self.fullscreen = bool(CONFIG.get("ui.fullscreen", False))
+        self.fullscreen = bool(CONFIG.get("ui.fullscreen", True))
+        self._is_fullscreen = self.fullscreen
+        self._minimized = False
 
     # ── loop thread ────────────────────────────────────────────────
     def start(self) -> None:
@@ -138,6 +141,11 @@ class Bridge:
             self.push("boot_failed", {
                 "message": "Ollama is not reachable. Run: ollama serve"})
             return
+
+        # The engine emits state; the window reacts. Keeping these decoupled
+        # means the audio loop never touches window handles.
+        BUS.on("window.minimize", lambda _: self.minimize())
+        BUS.on("window.restore", lambda _: self.restore())
 
         self._ready.set()
         self.push("ready", await asyncio.to_thread(lambda: {}))
@@ -171,6 +179,34 @@ class Bridge:
     def ask(self, text: str) -> None:
         if self.app and self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.app.handle(text), self.loop)
+
+    # ── window control ─────────────────────────────────────────────
+    def minimize(self) -> None:
+        """He has been dismissed. Get out of the way, keep listening."""
+        if self.window and not self._closing and not self._minimized:
+            try:
+                self.window.minimize()
+                self._minimized = True
+                log.info("minimised to wake mode")
+            except Exception:
+                log.debug("minimise failed")
+
+    def restore(self) -> None:
+        """Woken. Come back full screen and to the front."""
+        if not self.window or self._closing:
+            return
+        try:
+            if self._minimized:
+                self.window.restore()
+                self._minimized = False
+            # pywebview drops full screen on restore, so re-assert it.
+            if self.fullscreen and not self._is_fullscreen:
+                self.window.toggle_fullscreen()
+                self._is_fullscreen = True
+            self.window.on_top = True
+            self.window.on_top = CONFIG.get("ui.always_on_top", False)
+        except Exception:
+            log.debug("restore failed")
 
     def stop(self) -> None:
         self._closing = True   # stop pushing into a window that is going away
@@ -207,7 +243,7 @@ def run_windowed(args) -> int:
         height=CONFIG.get("ui.height", 720),
         min_size=(720, 520),
         frameless=CONFIG.get("ui.frameless", True),
-        fullscreen=CONFIG.get("ui.fullscreen", False),
+        fullscreen=CONFIG.get("ui.fullscreen", True),
         easy_drag=True,
         on_top=CONFIG.get("ui.always_on_top", False),
         background_color="#05070C",

@@ -354,3 +354,27 @@ body[data-state="tool"] #state-detail::after {
 
 /* full-screen toggle, lit when active */
 #btn-full.on { color: var(--accent); border-color: var(--accent); }
+
+/* ── conversation window ───────────────────────────────────────
+   Visible proof that he is still listening. Without it, nobody
+   realises they can simply keep talking. */
+#conversation {
+  width: 100%; margin-top: 14px; opacity: 0; height: 0; overflow: hidden;
+  transition: opacity .3s ease, height .3s ease;
+}
+#conversation.on { opacity: 1; height: 30px; }
+#conversation .label {
+  display: block; font-size: 9px; letter-spacing: 2px;
+  color: var(--accent); margin-bottom: 5px; text-align: center;
+}
+#conversation .track {
+  height: 2px; background: rgba(79,216,255,.12); border-radius: 1px;
+  overflow: hidden;
+}
+#conversation .track i {
+  display: block; height: 100%; width: 100%;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--accent) 40%, transparent), var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition: width .12s linear;
+}

@@ -39,6 +39,30 @@ _CORRUPT = re.compile(
 )
 
 
+_WORD_RE = re.compile(r"[a-z']+")
+
+# If any of these appear, a tool probably helps, so the fast path steps aside.
+# Erring toward the slow path is deliberate: a wrong fast-path decision produces
+# a confidently invented answer, which is the one failure mode worth avoiding.
+FAST_PATH_BLOCKERS = {
+    # machine state
+    "battery", "cpu", "memory", "ram", "disk", "storage", "space", "volume",
+    "brightness", "screenshot", "clipboard", "lock", "sleep", "shutdown",
+    "restart", "system", "computer", "laptop", "pc", "temperature", "usage",
+    # actions
+    "open", "close", "launch", "start", "stop", "run", "play", "pause",
+    "skip", "next", "previous", "resume", "mute", "unmute", "set", "turn",
+    "switch", "focus", "quit", "kill",
+    # information
+    "time", "date", "day", "today", "tomorrow", "weather", "forecast", "news",
+    "search", "google", "look", "find", "web", "internet", "headlines",
+    "file", "files", "folder", "document", "read", "download",
+    # memory
+    "remember", "forget", "recall", "my", "mine", "playing", "song", "music",
+    "spotify", "track", "playlist",
+}
+
+
 def _is_corrupt(text: str) -> bool:
     """True if the model is emitting tool-call machinery as speech."""
     return bool(text) and bool(_CORRUPT.search(text))
@@ -191,7 +215,68 @@ class Brain:
         return result
 
     # ── the main loop ──────────────────────────────────────────────
+    def _is_fast_path(self, text: str) -> bool:
+        """Short, keyword-free chit-chat that no tool could improve.
+
+        "thank you", "how are you", "that's funny" do not need 22 tool schemas
+        and a memory lookup. Skipping them turns a two-second reply into well
+        under one. Deliberately conservative: any hint that a tool might help
+        and it goes down the normal path, because a wrong fast-path decision
+        means a fabricated answer.
+        """
+        words = _WORD_RE.findall(text.lower())
+        if not words or len(words) > self.cfg.get("llm.fast_path_words", 8):
+            return False
+        return not (set(words) & FAST_PATH_BLOCKERS)
+
+    async def _respond_fast(self, user_text: str) -> AsyncIterator[Event]:
+        """A light call: no tools, no memory, only the last few turns."""
+        messages = [
+            {"role": "system", "content": persona.build_system_prompt(self.cfg)},
+            *self.history[-6:],
+            {"role": "user", "content": user_text},
+        ]
+        self.history.append({"role": "user", "content": user_text})
+        spoken = ""
+        buffer = ""
+        try:
+            stream = await self.client.chat(
+                model=self.model, messages=messages, stream=True,
+                options={**self._options(), "num_predict": 80},
+                keep_alive=self.cfg.get("llm.keep_alive", "30m"))
+            async for chunk in stream:
+                piece = (chunk.get("message") or {}).get("content") or ""
+                if not piece:
+                    continue
+                buffer += piece
+                sentences, buffer = self._split_sentences(buffer)
+                for s in sentences:
+                    spoken += s + " "
+                    yield Event("sentence", text=s)
+        except Exception as e:
+            log.exception("fast path failed")
+            yield Event("error", text=str(e))
+            return
+
+        tail = buffer.strip()
+        if tail:
+            spoken += tail
+            yield Event("sentence", text=tail)
+
+        final = spoken.strip()
+        if final:
+            self.history.append({"role": "assistant", "content": final})
+        self._trim()
+        log.info("fast path answered %r", user_text[:40])
+        yield Event("done", text=final)
+
     async def respond(self, user_text: str) -> AsyncIterator[Event]:
+        # Short, keyword-free chit-chat: no tools, no memory, last few turns.
+        if self._is_fast_path(user_text):
+            async for event in self._respond_fast(user_text):
+                yield event
+            return
+
         # Unambiguous commands are executed directly. This is both more reliable
         # than asking the model to recognise "skip" and considerably faster --
         # no round trip at all. See brain/intents.py for why.

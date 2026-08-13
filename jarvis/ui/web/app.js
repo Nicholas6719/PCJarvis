@@ -16,7 +16,7 @@ const api = () => window.pywebview && window.pywebview.api;
 
 const STATE_TEXT = {
   booting:   ['BOOTING',   'bringing systems online'],
-  idle:      ['STANDBY',   'listening for "Hey JARVIS"'],
+  idle:      ['STANDBY',   'say "Jarvis" or "Hey Jarvis"'],
   listening: ['LISTENING', 'go ahead'],
   thinking:  ['THINKING',  'working on it'],
   tool:      ['EXECUTING', 'running a tool'],
@@ -126,6 +126,23 @@ window.onJarvis = function (ev) {
       addActivity('wake word detected');
       break;
 
+    case 'conversation.open':
+      openConversation(ev.seconds || 15);
+      break;
+
+    case 'conversation.ended':
+      closeConversation();
+      addActivity('back to wake mode');
+      break;
+
+    case 'barge_in':
+      addActivity('interrupted', 'err');
+      break;
+
+    case 'listen.started':
+      addActivity('listening');
+      break;
+
     case 'listen.transcript':
       addMessage('YOU', ev.text, 'user');
       lastJarvis = null;
@@ -174,6 +191,32 @@ function fmtArgs(a) {
 function hideBoot() {
   document.getElementById('boot-overlay').classList.add('gone');
 }
+
+/* ── conversation window ─────────────────────────────────────────
+   The single most important affordance in the interface: while this is
+   counting down you can just keep talking, no wake word. If it is not
+   visible on screen, nobody discovers the feature exists. */
+let convoUntil = 0;
+const convoEl = document.getElementById('conversation');
+const convoBar = document.getElementById('convo-bar');
+
+function openConversation(seconds) {
+  convoUntil = Date.now() + seconds * 1000;
+  convoEl.classList.add('on');
+  convoEl.dataset.total = seconds;
+}
+function closeConversation() {
+  convoUntil = 0;
+  convoEl.classList.remove('on');
+  convoBar.style.width = '0%';
+}
+setInterval(() => {
+  if (!convoUntil) return;
+  const total = (Number(convoEl.dataset.total) || 15) * 1000;
+  const left = convoUntil - Date.now();
+  if (left <= 0) { closeConversation(); return; }
+  convoBar.style.width = `${Math.max(0, (left / total) * 100)}%`;
+}, 100);
 
 /* ── controls ────────────────────────────────────────────────── */
 document.getElementById('btn-talk').onclick = () => api() && api().trigger();

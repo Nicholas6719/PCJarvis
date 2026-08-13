@@ -12,18 +12,35 @@ audio:
 wake:
   enabled: true
   model: hey_jarvis         # pretrained openWakeWord model
-  threshold: 0.5            # raise if false triggers, lower if it misses you
+  # One model, both phrases. Measured on synthesized speech: "Hey Jarvis"
+  # peaks at 0.997, bare "Jarvis" between 0.46 and 0.955 depending on voice,
+  # while the confusable words (service, nervous, harvest) sit at 0.00-0.04.
+  # 0.45 therefore catches both with a wide margin. Raise if it fires at the
+  # television; lower if bare "Jarvis" is being missed.
+  threshold: 0.45
   refractory_seconds: 2.0   # ignore re-triggers for this long after firing
-  settle_ms: 450            # let the chime finish before listening (stops him hearing himself)
   chime: true               # small ascending blip when he wakes
 
 vad:
   threshold: 0.5            # silero speech probability
   min_speech_ms: 250        # ignore blips shorter than this
-  silence_ms: 800           # this much quiet = you're done talking
-  max_utterance_s: 30       # hard stop
+  silence_ms: 700           # this much quiet = you're done talking
+  silence_ms_long: 750      # ...after 2.5s of speech, give a little more room
+  max_utterance_s: 15       # hard stop
   patience_s: 6.0           # how long to wait for you to start speaking
-  preroll_ms: 300           # audio kept from before speech was detected
+  # A rolling buffer of audio from BEFORE the wake word fired. People say
+  # "Hey Jarvis what time is it" in one breath, and the wake model needs most
+  # of a second to fire -- by which point the command is already half spoken.
+  # Without this, the start is simply lost.
+  preroll_ms: 2000
+  post_speech_guard_ms: 300  # settle + flush the mic after he stops speaking
+
+conversation:
+  # After he answers you can just keep talking -- no wake word. The window
+  # resets on every turn and again when he finishes speaking, and is paused
+  # while he speaks so a long answer never burns it.
+  window_s: 15
+  enabled: true
 
 stt:
   model: small.en           # tiny.en | base.en | small.en | medium.en
@@ -41,6 +58,7 @@ llm:
   keep_alive: 30m                # keep weights resident between turns
   max_tool_iterations: 6         # safety rail on the tool loop
   history_turns: 12              # conversational memory held in context
+  fast_path_words: 8             # short, keyword-free chit-chat skips the tools
   max_tools: 10                  # tool schemas sent per turn (see tools/router.py)
 
 # ── The voice ─────────────────────────────────────────────────────
@@ -107,7 +125,8 @@ ui:
   width: 1100
   height: 720
   frameless: true
-  fullscreen: false         # start full screen (F11 toggles at any time)
+  fullscreen: true          # ALWAYS launches full screen. F11 toggles.
+  minimize_on_sleep: true   # "that's all" minimises; the wake word restores
   always_on_top: false
   start_minimized: false
   hotkey: ctrl+alt+j        # trigger without the wake word
