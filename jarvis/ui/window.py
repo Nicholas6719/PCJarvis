@@ -21,11 +21,11 @@ from pathlib import Path
 import webview
 
 from ..bus import BUS
-from ..config import CONFIG
+from ..config import BUNDLE, CONFIG, FROZEN
 
 log = logging.getLogger("jarvis.ui")
 
-WEB_DIR = Path(__file__).resolve().parent / "web"
+WEB_DIR = BUNDLE / "jarvis" / "ui" / "web" if FROZEN else Path(__file__).resolve().parent / "web"
 
 
 class Api:
@@ -100,6 +100,7 @@ class Bridge:
         self.loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
+        self._closing = False
 
     # ── loop thread ────────────────────────────────────────────────
     def start(self) -> None:
@@ -138,7 +139,11 @@ class Bridge:
         self.push(kind, event)
 
     def push(self, kind: str, payload: dict | None = None) -> None:
-        if not self.window:
+        # Once the window is gone, evaluate_js raises ObjectDisposedException
+        # from the .NET side and pywebview logs a full traceback for each one.
+        # During shutdown the pipeline is still emitting events, so without this
+        # guard closing the app produces a wall of errors.
+        if not self.window or self._closing:
             return
         try:
             data = json.dumps({"type": kind, **(payload or {})}, default=str)
@@ -156,6 +161,7 @@ class Bridge:
             asyncio.run_coroutine_threadsafe(self.app.handle(text), self.loop)
 
     def stop(self) -> None:
+        self._closing = True   # stop pushing into a window that is going away
         if self.app and self.loop and self.loop.is_running():
             asyncio.run_coroutine_threadsafe(self.app.shutdown(), self.loop)
         time.sleep(0.3)

@@ -42,6 +42,14 @@ class Listener:
         self.min_speech_ms = cfg.get("vad.min_speech_ms", 250)
         self.silence_ms = cfg.get("vad.silence_ms", 800)
         self.max_utterance_s = cfg.get("vad.max_utterance_s", 30)
+        # The acknowledgement chime plays out of the speakers and straight back
+        # into the microphone. Without a settling window the VAD counts it as
+        # speech, 800ms of quiet then ends the turn, and he is left talking to
+        # something that stopped listening before he opened his mouth.
+        self.settle_ms = cfg.get("wake.settle_ms", 450)
+        # How long to wait for him to actually start talking before standing
+        # down. Short values feel like being cut off mid-thought.
+        self.patience_s = cfg.get("vad.patience_s", 6.0)
 
         self.mode = Mode.WAITING
         self._force_capture = asyncio.Event()  # push-to-talk / hotkey
@@ -95,11 +103,21 @@ class Listener:
                 if fired:
                     self.mode = Mode.CAPTURING
                     self.vad.reset()
-                    captured = [self.mic.preroll_audio()]
+                    captured = []
                     speech_ms = silence_ms = 0.0
                     started_at = time.monotonic()
                     await BUS.emit("wake.detected")
                 continue
+
+            # ── settling: let the chime finish before we listen ────
+            if (time.monotonic() - started_at) * 1000 < self.settle_ms:
+                continue
+            if not captured:
+                # First real frame. Drop everything buffered during the chime
+                # so none of it reaches the VAD or Whisper.
+                self.vad.reset()
+                self.mic.drain()
+                await BUS.emit("listen.ready")
 
             # ── capturing your sentence ────────────────────────────
             captured.append(frame)
@@ -115,18 +133,20 @@ class Listener:
             endpoint = (
                 (speech_ms >= self.min_speech_ms and silence_ms >= self.silence_ms)
                 or elapsed >= self.max_utterance_s
-                # Woken by accident: nothing said in the first 2.5s.
-                or (speech_ms < self.min_speech_ms and elapsed > 2.5)
+                # Woken by accident, or he never started speaking.
+                or (speech_ms < self.min_speech_ms and elapsed > self.patience_s)
             )
             if not endpoint:
                 continue
 
             self.mode = Mode.WAITING
-            audio = np.concatenate(captured)
+            audio = np.concatenate(captured) if captured else np.zeros(0, np.float32)
             captured = []
 
             if speech_ms < self.min_speech_ms:
-                log.debug("woke but heard nothing; standing down")
+                # At INFO, not DEBUG. This silently swallowed every failed turn
+                # and made the microphone look broken when it was working.
+                log.info("woke but heard no speech in %.1fs; standing down", elapsed)
                 await BUS.emit("listen.empty")
                 if self.wake:
                     self.wake.reset()

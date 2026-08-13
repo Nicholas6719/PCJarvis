@@ -29,142 +29,16 @@ let micLevel = 0, outLevel = 0, smoothMic = 0, smoothOut = 0;
 let t = 0;
 
 /* ── reactor ─────────────────────────────────────────────────── */
-const canvas = document.getElementById('reactor');
-const ctx = canvas.getContext('2d');
-const DPR = window.devicePixelRatio || 1;
+import { Reactor } from './reactor.js';
 
-function sizeCanvas() {
-  const css = canvas.clientWidth || 300;
-  canvas.width = canvas.height = css * DPR;
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  return css;
+const reactor = new Reactor(document.getElementById('reactor'));
+let bootProgress = 0;
+
+function frame() {
+  reactor.draw();
+  requestAnimationFrame(frame);
 }
-let size = sizeCanvas();
-window.addEventListener('resize', () => { size = sizeCanvas(); });
-
-const CYAN = [79, 216, 255];
-const GOLD = [255, 201, 107];
-
-const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-
-function draw() {
-  t += 0.016;
-  smoothMic += (micLevel - smoothMic) * 0.28;
-  smoothOut += (outLevel - smoothOut) * 0.34;
-
-  const w = size, h = size, cx = w / 2, cy = h / 2;
-  const R = Math.min(w, h) * 0.42;
-  ctx.clearRect(0, 0, w, h);
-
-  const speaking = state === 'speaking';
-  const col = speaking ? GOLD : CYAN;
-
-  // energy: what the reactor is reacting to right now
-  let energy = 0.10 + Math.sin(t * 1.5) * 0.03;              // idle breath
-  if (state === 'listening') energy = 0.16 + smoothMic * 1.5;
-  else if (state === 'thinking' || state === 'tool') energy = 0.34;
-  else if (speaking) energy = 0.20 + smoothOut * 1.7;
-  energy = Math.min(energy, 1.0);
-
-  // ── outer glow ──
-  const glow = ctx.createRadialGradient(cx, cy, R * 0.15, cx, cy, R * 1.5);
-  glow.addColorStop(0, rgba(col, 0.16 + energy * 0.26));
-  glow.addColorStop(0.55, rgba(col, 0.05));
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, w, h);
-
-  // ── static outer ring with tick marks ──
-  ctx.strokeStyle = rgba(col, 0.22);
-  ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
-
-  for (let i = 0; i < 60; i++) {
-    const a = (i / 60) * Math.PI * 2;
-    const major = i % 5 === 0;
-    const r1 = R * (major ? 0.93 : 0.96);
-    ctx.globalAlpha = major ? 0.5 : 0.22;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
-    ctx.lineTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-
-  // ── rotating arc rings ──
-  const spin = (state === 'thinking' || state === 'tool') ? 2.6 : 0.42;
-  const rings = [
-    { r: R * 0.86, from: 0.00, len: 1.5, dir:  1, w: 2.0 },
-    { r: R * 0.74, from: 2.20, len: 1.1, dir: -1, w: 1.5 },
-    { r: R * 0.62, from: 4.10, len: 1.9, dir:  1, w: 1.2 },
-  ];
-  rings.forEach((ring, i) => {
-    const a0 = ring.from + t * spin * ring.dir * (1 + i * 0.16);
-    ctx.strokeStyle = rgba(col, 0.55 + energy * 0.4);
-    ctx.lineWidth = ring.w;
-    ctx.lineCap = 'round';
-    ctx.shadowBlur = 14; ctx.shadowColor = rgba(col, 0.7);
-    ctx.beginPath();
-    ctx.arc(cx, cy, ring.r, a0, a0 + ring.len);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  });
-
-  // ── tool mode: a stepping dial ──
-  if (state === 'tool') {
-    const seg = 12, step = Math.floor(t * 7) % seg;
-    for (let i = 0; i < seg; i++) {
-      const a = (i / seg) * Math.PI * 2 - Math.PI / 2;
-      ctx.globalAlpha = i === step ? 1 : 0.18;
-      ctx.fillStyle = rgba(col, 1);
-      ctx.beginPath();
-      ctx.arc(cx + Math.cos(a) * R * 0.52, cy + Math.sin(a) * R * 0.52,
-              2.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // ── listening: ripples driven by the microphone ──
-  if (state === 'listening' && smoothMic > 0.012) {
-    for (let i = 0; i < 3; i++) {
-      const phase = (t * 0.85 + i / 3) % 1;
-      ctx.strokeStyle = rgba(col, (1 - phase) * 0.4 * Math.min(smoothMic * 4, 1));
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * (0.30 + phase * 0.68), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  // ── core ──
-  const coreR = R * (0.26 + energy * 0.16);
-  const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  core.addColorStop(0, '#FFFFFF');
-  core.addColorStop(0.3, rgba(col, 0.95));
-  core.addColorStop(1, rgba(col, 0));
-  ctx.fillStyle = core;
-  ctx.shadowBlur = 34; ctx.shadowColor = rgba(col, 0.85);
-  ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowBlur = 0;
-
-  // triangular core detail, echoing the reactor housing
-  ctx.strokeStyle = rgba(col, 0.8);
-  ctx.lineWidth = 1.4;
-  for (let k = 0; k < 2; k++) {
-    ctx.beginPath();
-    for (let i = 0; i < 3; i++) {
-      const a = t * 0.3 * (k ? -1 : 1) + (i / 3) * Math.PI * 2 + k * Math.PI / 3;
-      const r = R * 0.19;
-      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.closePath(); ctx.stroke();
-  }
-
-  requestAnimationFrame(draw);
-}
-requestAnimationFrame(draw);
+requestAnimationFrame(frame);
 
 /* ── transcript ──────────────────────────────────────────────── */
 const transcript = document.getElementById('transcript');
@@ -212,6 +86,8 @@ function addActivity(text, cls = 'tool') {
 /* ── state ───────────────────────────────────────────────────── */
 function setState(s) {
   state = s;
+  reactor.setState(s);
+  document.body.dataset.state = s;   // drives the ambient CSS
   const [label, detail] = STATE_TEXT[s] || [s.toUpperCase(), ''];
   document.getElementById('state-label').textContent = label;
   document.getElementById('state-detail').textContent = detail;
@@ -224,11 +100,13 @@ window.onJarvis = function (ev) {
   switch (ev.type) {
     case 'state':
       setState(ev.state);
-      if (ev.state !== 'booting') hideBoot();
+      if (ev.state !== 'booting') { reactor.setBootProgress(1); hideBoot(); }
       break;
 
     case 'boot':
       document.querySelector('.boot-step').textContent = ev.step || '';
+      bootProgress = Math.min(bootProgress + 0.34, 0.9);
+      reactor.setBootProgress(bootProgress);
       break;
 
     case 'boot_failed':
@@ -238,6 +116,7 @@ window.onJarvis = function (ev) {
       break;
 
     case 'ready':
+      reactor.setBootProgress(1);
       hideBoot();
       addActivity('all systems online', 'ok');
       break;
@@ -250,6 +129,10 @@ window.onJarvis = function (ev) {
     case 'listen.transcript':
       addMessage('YOU', ev.text, 'user');
       lastJarvis = null;
+      break;
+
+    case 'listen.ready':
+      addActivity('listening');
       break;
 
     case 'listen.empty':
@@ -338,6 +221,7 @@ setInterval(async () => {
     const l = await api().levels();
     micLevel = l.mic || 0;
     outLevel = l.out || 0;
+    reactor.setLevels(micLevel, outLevel);
   } catch (_) { /* backend still booting */ }
 }, 60);
 

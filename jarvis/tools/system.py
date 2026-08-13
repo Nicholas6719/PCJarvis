@@ -148,11 +148,24 @@ def focus_window(title: str) -> str:
 #  Audio
 # ══════════════════════════════════════════════════════════════════
 def _volume_interface():
-    from comtypes import CLSCTX_ALL
-    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+    """The master volume control.
 
-    devices = AudioUtilities.GetSpeakers()
-    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    pycaw changed shape: newer builds hand back an AudioDevice that exposes
+    EndpointVolume directly, older ones return a raw COM object that has to be
+    Activated. Support both, newest first.
+    """
+    from pycaw.pycaw import AudioUtilities
+
+    speakers = AudioUtilities.GetSpeakers()
+
+    endpoint = getattr(speakers, "EndpointVolume", None)
+    if endpoint is not None:
+        return endpoint
+
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import IAudioEndpointVolume
+
+    interface = speakers.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
     return interface.QueryInterface(IAudioEndpointVolume)
 
 

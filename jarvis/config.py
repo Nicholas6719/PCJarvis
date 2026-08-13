@@ -3,15 +3,33 @@ config.local.yaml (gitignored) overrides it if present."""
 from __future__ import annotations
 
 import copy
+import sys
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
+# Frozen (PyInstaller) and source layouts differ in an important way: code and
+# web assets live inside the bundle, but models, config and the memory database
+# must sit beside the executable where they can be read, written and updated
+# without rebuilding.
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    ROOT = Path(sys.executable).resolve().parent   # writable, next to the exe
+    BUNDLE = Path(getattr(sys, "_MEIPASS", ROOT))  # read-only, inside the exe
+else:
+    ROOT = Path(__file__).resolve().parent.parent
+    BUNDLE = ROOT
+
 MODELS_DIR = ROOT / "models"
 DATA_DIR = ROOT / "data"
 LOGS_DIR = ROOT / "logs"
+
+
+def _config_path() -> Path:
+    """Prefer the editable copy beside the exe; fall back to the bundled one."""
+    beside = ROOT / "config.yaml"
+    return beside if beside.exists() else BUNDLE / "config.yaml"
 
 
 def _deep_merge(base: dict, over: dict) -> dict:
@@ -32,7 +50,7 @@ class Config:
 
     @classmethod
     def load(cls) -> "Config":
-        with open(ROOT / "config.yaml", encoding="utf-8") as f:
+        with open(_config_path(), encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         local = ROOT / "config.local.yaml"
         if local.exists():

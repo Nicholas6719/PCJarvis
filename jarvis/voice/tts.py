@@ -19,14 +19,14 @@ from pathlib import Path
 import numpy as np
 from scipy import signal as _sig
 
-from ..config import MODELS_DIR, ROOT
+from ..config import BUNDLE, MODELS_DIR
 from . import jarvis_chain
 
 log = logging.getLogger("jarvis.tts")
 
 KOKORO_MODEL = MODELS_DIR / "kokoro" / "kokoro-v1.0.onnx"
 KOKORO_VOICES = MODELS_DIR / "kokoro" / "voices-v1.0.bin"
-IR_PATH = ROOT / "jarvis" / "voice" / "ir" / "workshop.wav"
+IR_PATH = BUNDLE / "jarvis" / "voice" / "ir" / "workshop.wav"
 
 # JARVIS speaks with exactly one voice. This was chosen by ear against every
 # other British male voice Kokoro ships, against blends of them, and against

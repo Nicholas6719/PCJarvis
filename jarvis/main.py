@@ -54,7 +54,10 @@ def setup_logging(level: str = "INFO") -> None:
             logging.FileHandler(LOGS_DIR / "jarvis.log", encoding="utf-8"),
         ],
     )
-    for noisy in ("httpx", "httpcore", "urllib3", "numba", "faster_whisper"):
+    for noisy in ("httpx", "httpcore", "urllib3", "numba", "faster_whisper",
+                  "comtypes", "comtypes.client", "comtypes.client._generate",
+                  "comtypes.client._code_cache", "phonemizer", "PIL",
+                  "trafilatura", "pywebview", "matplotlib"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
@@ -258,9 +261,11 @@ class Jarvis:
             listen_task.cancel()
 
     def _on_wake(self) -> None:
-        self.chime()
+        # Barge-in first, then chime. The other order queues the chime and then
+        # immediately interrupts it, so he gets silence and no idea he was heard.
         if self.player and self.player.is_playing:
-            self.player.interrupt()  # barge-in
+            self.player.interrupt()
+        self.chime()
         asyncio.create_task(self.set_state(State.LISTENING))
 
     async def shutdown(self) -> None:

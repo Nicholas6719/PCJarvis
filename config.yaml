@@ -14,6 +14,7 @@ wake:
   model: hey_jarvis         # pretrained openWakeWord model
   threshold: 0.5            # raise if false triggers, lower if it misses you
   refractory_seconds: 2.0   # ignore re-triggers for this long after firing
+  settle_ms: 450            # let the chime finish before listening (stops him hearing himself)
   chime: true               # small ascending blip when he wakes
 
 vad:
@@ -21,6 +22,7 @@ vad:
   min_speech_ms: 250        # ignore blips shorter than this
   silence_ms: 800           # this much quiet = you're done talking
   max_utterance_s: 30       # hard stop
+  patience_s: 6.0           # how long to wait for you to start speaking
   preroll_ms: 300           # audio kept from before speech was detected
 
 stt:

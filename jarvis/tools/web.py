@@ -38,10 +38,16 @@ def web_search(query: str, count: int = 5) -> str:
         if not results:
             return f"No results for {query}."
 
-        lines = [f"Search results for '{query}':"]
-        for i, r in enumerate(results, 1):
+        # Deliberately unnumbered and terse. A numbered list invites him to read
+        # the list out, and a spoken numbered list is unbearable -- the answer
+        # should be two sentences synthesised from these, not a recital.
+        lines = [
+            f"Search findings for '{query}' (summarise these in one or two "
+            f"spoken sentences; do NOT list them):"
+        ]
+        for r in results:
             body = (r.get("body") or "").strip().replace("\n", " ")
-            lines.append(f"{i}. {r.get('title', '')} -- {body[:280]}")
+            lines.append(f"- {r.get('title', '')}: {body[:200]}")
         return "\n".join(lines)
     except Exception as e:
         log.exception("search failed")
