@@ -36,7 +36,8 @@ llm:
   model: qwen2.5:7b-instruct     # primary — strong native tool calling
   fast_model: llama3.2:3b        # unused by default; swap in for snappier chat
   temperature: 0.6
-  num_ctx: 8192
+  num_predict: 120               # spoken replies are short; caps runaway generation
+  num_ctx: 4096                  # our prompt is ~1500 tok; smaller = less KV, faster
   keep_alive: 30m                # keep weights resident between turns
   max_tool_iterations: 6         # safety rail on the tool loop
   history_turns: 12              # conversational memory held in context
@@ -106,6 +107,7 @@ ui:
   width: 1100
   height: 720
   frameless: true
+  fullscreen: false         # start full screen (F11 toggles at any time)
   always_on_top: false
   start_minimized: false
   hotkey: ctrl+alt+j        # trigger without the wake word

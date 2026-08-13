@@ -147,6 +147,23 @@ def focus_window(title: str) -> str:
 # ══════════════════════════════════════════════════════════════════
 #  Audio
 # ══════════════════════════════════════════════════════════════════
+def _com_init() -> None:
+    """Initialise COM on the calling thread.
+
+    Tools run via asyncio.to_thread, so they land on arbitrary worker threads
+    from the pool. COM is per-thread: whichever thread happens to go first
+    works, and the rest fail with "CoInitialize has not been called". That makes
+    volume and media control intermittent in a way that looks like a hardware
+    fault rather than a threading bug.
+    """
+    import comtypes
+
+    try:
+        comtypes.CoInitialize()
+    except Exception:
+        pass  # already initialised on this thread, which is fine
+
+
 def _volume_interface():
     """The master volume control.
 
@@ -154,6 +171,7 @@ def _volume_interface():
     EndpointVolume directly, older ones return a raw COM object that has to be
     Activated. Support both, newest first.
     """
+    _com_init()
     from pycaw.pycaw import AudioUtilities
 
     speakers = AudioUtilities.GetSpeakers()

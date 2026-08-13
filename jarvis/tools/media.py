@@ -29,7 +29,18 @@ async def _session():
 
 
 def _run(coro):
-    """Bridge winsdk's async API into our sync tool functions."""
+    """Bridge winsdk's async API into our sync tool functions.
+
+    Tools execute on pool threads, and both WinRT and COM are per-thread, so
+    each call initialises them itself. Without this, media control works on
+    whichever thread happens to go first and fails on every other one.
+    """
+    try:
+        import comtypes
+        comtypes.CoInitialize()
+    except Exception:
+        pass
+
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:

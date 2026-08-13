@@ -1,7 +1,16 @@
 """Silero VAD, driven directly through onnxruntime.
 
-The pip package for silero pulls in torch (~2GB), which is absurd for a 2MB
-model on a laptop with no CUDA. We run the ONNX graph ourselves instead.
+The pip package pulls in torch (~2GB), which is absurd for a 2MB model on a
+laptop with no CUDA, so we run the ONNX graph ourselves.
+
+The one non-obvious requirement, and the source of a bug that made JARVIS
+appear deaf: silero v5 is a *streaming* model that needs the last 64 samples of
+the previous chunk prepended to each 512-sample window, giving 576 inputs. Feed
+it a bare 512 and it does not complain -- no exception, no warning -- it simply
+returns ~0.001 for every frame forever, including shouted speech. Measured:
+
+    512 alone     speech max 0.003   silence max 0.002   (useless)
+    64 + 512      speech max 1.000   silence max 0.027   (correct)
 """
 from __future__ import annotations
 
@@ -14,7 +23,8 @@ from ..config import MODELS_DIR
 
 log = logging.getLogger("jarvis.vad")
 
-WINDOW = 512  # silero v5 wants exactly 512 samples at 16kHz
+WINDOW = 512      # samples of new audio per inference, at 16kHz
+CONTEXT = 64      # samples carried over from the previous window
 
 
 class SileroVAD:
@@ -34,7 +44,6 @@ class SileroVAD:
         self.input_names = {i.name for i in self.session.get_inputs()}
         self.threshold = threshold
         self.sample_rate = sample_rate
-        self._tail = np.zeros(0, dtype=np.float32)
         self.reset()
 
     def reset(self) -> None:
@@ -42,11 +51,16 @@ class SileroVAD:
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
         self._h = np.zeros((2, 1, 64), dtype=np.float32)
         self._c = np.zeros((2, 1, 64), dtype=np.float32)
+        self._context = np.zeros(CONTEXT, dtype=np.float32)
         self._tail = np.zeros(0, dtype=np.float32)
 
     def _infer(self, window: np.ndarray) -> float:
+        # Prepend the carried context -- without this the model returns a
+        # constant and the whole listener goes deaf.
+        payload = np.concatenate([self._context, window]).astype(np.float32)
+
         feeds: dict[str, np.ndarray] = {
-            "input": window.reshape(1, -1).astype(np.float32),
+            "input": payload.reshape(1, -1),
             "sr": np.array(self.sample_rate, dtype=np.int64),
         }
         if "state" in self.input_names:
@@ -57,17 +71,21 @@ class SileroVAD:
 
         out = self.session.run(None, feeds)
         prob = float(out[0].squeeze())
+
         if "state" in self.input_names:
             self._state = out[1]
         else:
             self._h, self._c = out[1], out[2]
+
+        self._context = window[-CONTEXT:].copy()
         return prob
 
     def probability(self, frame: np.ndarray) -> float:
         """Speech probability for an arbitrary-length frame.
 
-        Frames arrive as 1280 samples but silero wants 512, so we buffer and
-        return the max probability across the complete windows in this frame.
+        Frames arrive as 1280 samples but the model consumes 512 at a time, so
+        we buffer and return the highest probability across the complete windows
+        contained in this frame.
         """
         buf = np.concatenate([self._tail, frame.astype(np.float32)])
         n = (len(buf) // WINDOW) * WINDOW

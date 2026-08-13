@@ -351,3 +351,6 @@ body[data-state="tool"] #state-detail::after {
     color-mix(in srgb, var(--accent) 45%, transparent), var(--accent));
   box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
+
+/* full-screen toggle, lit when active */
+#btn-full.on { color: var(--accent); border-color: var(--accent); }

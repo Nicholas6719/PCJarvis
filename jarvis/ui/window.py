@@ -86,6 +86,17 @@ class Api:
         except Exception:
             return {}
 
+    def toggle_fullscreen(self) -> bool:
+        """F11 / the maximise button. Returns the new state."""
+        if self._bridge.window:
+            self._bridge.window.toggle_fullscreen()
+            self._bridge.fullscreen = not self._bridge.fullscreen
+        return self._bridge.fullscreen
+
+    def minimize(self) -> None:
+        if self._bridge.window:
+            self._bridge.window.minimize()
+
     def quit(self) -> None:
         self._bridge.stop()
 
@@ -101,6 +112,7 @@ class Bridge:
         self._thread: threading.Thread | None = None
         self._ready = threading.Event()
         self._closing = False
+        self.fullscreen = bool(CONFIG.get("ui.fullscreen", False))
 
     # ── loop thread ────────────────────────────────────────────────
     def start(self) -> None:
@@ -195,6 +207,7 @@ def run_windowed(args) -> int:
         height=CONFIG.get("ui.height", 720),
         min_size=(720, 520),
         frameless=CONFIG.get("ui.frameless", True),
+        fullscreen=CONFIG.get("ui.fullscreen", False),
         easy_drag=True,
         on_top=CONFIG.get("ui.always_on_top", False),
         background_color="#05070C",

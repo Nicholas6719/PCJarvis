@@ -107,9 +107,13 @@ class Brain:
 
     # ── helpers ────────────────────────────────────────────────────
     def _options(self) -> dict:
+        # num_predict is a real latency lever: generation runs at ~11 tok/s on
+        # this iGPU, so an unbounded reply that rambles to 300 tokens costs half
+        # a minute. Spoken answers are one or two sentences by design.
         return {
             "temperature": self.cfg.get("llm.temperature", 0.6),
-            "num_ctx": self.cfg.get("llm.num_ctx", 8192),
+            "num_ctx": self.cfg.get("llm.num_ctx", 4096),
+            "num_predict": self.cfg.get("llm.num_predict", 120),
         }
 
     def _messages(self) -> list[dict]:

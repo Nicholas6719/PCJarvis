@@ -189,9 +189,17 @@ muteBtn.onclick = () => {
 };
 
 document.getElementById('btn-quit').onclick = () => api() && api().quit();
-document.getElementById('btn-min').onclick = () => {
-  if (window.pywebview) window.pywebview.api.trigger && window.top.blur();
-};
+document.getElementById('btn-min').onclick = () => api() && api().minimize();
+
+const fullBtn = document.getElementById('btn-full');
+function toggleFullscreen() {
+  if (!api()) return;
+  api().toggle_fullscreen().then((on) => {
+    fullBtn.classList.toggle('on', !!on);
+    fullBtn.title = on ? 'Exit full screen (F11)' : 'Full screen (F11)';
+  });
+}
+fullBtn.onclick = toggleFullscreen;
 
 const input = document.getElementById('input');
 function send() {
@@ -212,6 +220,7 @@ document.addEventListener('keydown', (e) => {
     if (api()) api().trigger();
   }
   if (e.key === 'Escape' && api()) api().interrupt();
+  if (e.key === 'F11') { e.preventDefault(); toggleFullscreen(); }
 });
 
 /* ── polling ─────────────────────────────────────────────────── */
