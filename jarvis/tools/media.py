@@ -31,27 +31,36 @@ async def _session():
 def _run(coro):
     """Bridge winsdk's async API into our sync tool functions.
 
-    Tools execute on pool threads, and both WinRT and COM are per-thread, so
-    each call initialises them itself. Without this, media control works on
-    whichever thread happens to go first and fails on every other one.
+    Always executed on a fresh worker thread, never on whatever thread happened
+    to call in. WinRT objects are apartment-bound, and the previous version ran
+    the coroutine on a new event loop inside the *calling* thread whenever one
+    was already running. That worked once and then degraded: repeated polling
+    started returning nothing at all, so "what's playing" went quiet and the
+    Spotify verification could not tell whether a track had started.
+
+    A dedicated thread gets a clean apartment and the plain asyncio.run path
+    every single time.
     """
-    try:
-        import comtypes
-        comtypes.CoInitialize()
-    except Exception:
-        pass
+    import concurrent.futures
+
+    def worker():
+        try:
+            import comtypes
+            comtypes.CoInitialize()
+        except Exception:
+            pass
+        try:
+            return asyncio.run(coro)
+        except Exception:
+            log.debug("media call failed", exc_info=True)
+            return None
 
     try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    # Already inside a loop (tools run via asyncio.to_thread), so use a new one.
-    new_loop = asyncio.new_event_loop()
-    try:
-        return new_loop.run_until_complete(coro)
-    finally:
-        new_loop.close()
-    del loop
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(worker).result(timeout=8)
+    except Exception:
+        log.debug("media call timed out", exc_info=True)
+        return None
 
 
 @tool(category="media")
@@ -133,11 +142,18 @@ def now_playing() -> str:
         state = {4: "Playing", 5: "Paused"}.get(
             int(info.playback_status), "Loaded"
         )
-        app = (s.source_app_user_model_id or "").split("!")[0].split(".")[-1]
+        # "Spotify.exe" -> "Spotify". Splitting on "." took the last part
+        # and announced everything as playing "on exe".
+        raw = (s.source_app_user_model_id or "").split("!")[0]
+        app = raw.rsplit("\\", 1)[-1]
+        if app.lower().endswith(".exe"):
+            app = app[:-4]
+        app = app.strip()
+
         text = f"{state}: {title}"
         if artist:
             text += f" by {artist}"
-        return text + (f" on {app}." if app else ".")
+        return text + (f" on {app}." if app and len(app) > 1 else ".")
     return _run(go())
 
 

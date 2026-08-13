@@ -126,6 +126,7 @@ class Jarvis:
         self._interrupted = False
         self._last_proactive = ""
         self._warm_task: asyncio.Task | None = None
+        self._shut_down = False
 
     # ── state ──────────────────────────────────────────────────────
     async def set_state(self, state: State) -> None:
@@ -510,8 +511,18 @@ class Jarvis:
                       exc_info=exc)
 
     async def shutdown(self) -> None:
+        """Tear everything down, including the model.
+
+        Runs on every exit path -- voice shutdown, the close button,
+        Alt+F4 -- because the expensive thing is not JARVIS, it is the
+        eight gigabytes Ollama keeps hold of after we are gone.
+        """
+        if self._shut_down:
+            return                      # exit paths can overlap
+        self._shut_down = True
         self.running = False
         log.info("shutting down")
+
         if self.speaker:
             self.speaker.shutdown()
         if self.mic:
@@ -520,6 +531,14 @@ class Jarvis:
             self.player.stop()
         if self.memory:
             self.memory.close()
+
+        if self.cfg.get("llm.stop_ollama_on_exit", True):
+            try:
+                stopped, freed = await asyncio.to_thread(health.stop_ollama)
+                if stopped:
+                    log.info("released %.1f GB by stopping Ollama", freed)
+            except Exception:
+                log.debug("could not stop Ollama", exc_info=True)
 
 
 # ── console rendering, for --no-ui ─────────────────────────────────

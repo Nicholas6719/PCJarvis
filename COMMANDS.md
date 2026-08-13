@@ -66,8 +66,15 @@ Each answers *only* what was asked — the CPU question gives you the CPU.
 **"volume 40"** · **"mute"** · **"unmute"** · **"brighter"** · **"dimmer"** ·
 **"take a screenshot"** · **"lock my screen"**
 
-### Media
-**"Pause"** · **"resume"** · **"skip"** · **"previous"** · **"what's playing?"**
+### Music
+**"Play music"** · **"play some jazz"** · **"play Take Five by Dave Brubeck"** ·
+**"listen to Miles Davis"** · **"pause"** · **"resume"** · **"skip"** ·
+**"previous"** · **"what's playing?"**
+
+Uses your Spotify app directly — no account link, no API key. He finds the
+track and hands it to the player. **He verifies what actually started and
+tells you the truth**: if a playlist opens but does not begin, he says so
+rather than claiming it is playing.
 
 ### Opening things
 **"Open YouTube"** · **"go to GitHub"** · **"open my downloads"** ·

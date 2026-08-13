@@ -40,7 +40,7 @@ CORE: tuple[str, ...] = (
     # files
     "find_files", "read_file", "open_file",
     # media
-    "play_pause", "pause_media", "next_track", "now_playing",
+    "play_music", "play_pause", "pause_media", "next_track", "now_playing",
     # memory
     "remember", "recall",
 )
@@ -107,6 +107,12 @@ EXTRAS: dict[str, set[str]] = {
     "list_capabilities":   {"what can you do", "capabilities", "help me",
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
+
+    # -- spotify, driven through the desktop app --
+    "play_music":          {"play", "put on", "listen to", "music",
+                            "song", "spotify"},
+    "play_playlist":       {"playlist", "mix", "radio"},
+    "open_spotify":        {"spotify"},
 }
 
 _WORD = re.compile(r"[a-z']+")

@@ -246,13 +246,26 @@ class Bridge:
             self.channel.window_op("restore")
 
     def stop(self) -> None:
+        """Full teardown. Waits for it, so Ollama is actually released.
+
+        The previous version fired the shutdown coroutine and slept 0.3s,
+        which was never long enough to unload a model -- the process exited
+        first and left the weights resident.
+        """
         self._closing = True   # stop pushing into a window that is going away
         self.channel.close()
         if self.app and self.loop and self.loop.is_running():
-            asyncio.run_coroutine_threadsafe(self.app.shutdown(), self.loop)
-        time.sleep(0.3)
+            future = asyncio.run_coroutine_threadsafe(
+                self.app.shutdown(), self.loop)
+            try:
+                future.result(timeout=15)
+            except Exception:
+                log.debug("shutdown did not complete cleanly", exc_info=True)
         if self.window:
-            self.window.destroy()
+            try:
+                self.window.destroy()
+            except Exception:
+                pass
 
 
 def _register_hotkey(bridge: Bridge) -> None:
@@ -291,6 +304,17 @@ def run_windowed(args) -> int:
     bridge.start()
     _register_hotkey(bridge)
 
+    # Closing the window by any means -- the button, Alt+F4, the taskbar --
+    # lands here, so the teardown is guaranteed rather than hoped for.
     webview.start(debug=False)
     bridge.stop()
+
+    # Belt and braces: if the loop was already gone, stop Ollama directly.
+    try:
+        from ..health import stop_ollama
+
+        if CONFIG.get("llm.stop_ollama_on_exit", True):
+            stop_ollama()
+    except Exception:
+        pass
     return 0

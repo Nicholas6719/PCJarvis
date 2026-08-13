@@ -129,6 +129,74 @@ def reap_orphaned_webviews() -> tuple[int, float]:
     return killed, freed / 1e9
 
 
+def stop_ollama(timeout: float = 6.0) -> tuple[bool, float]:
+    """Shut Ollama down and release the model's memory.
+
+    Order matters enormously here. Killing ollama.exe on its own orphans the
+    llama-server child that actually holds the weights -- which is precisely
+    the leak that filled this machine four times over. So:
+
+      1. ask Ollama to unload the model (keep_alive=0), the graceful path
+      2. terminate the llama-server children explicitly
+      3. only then stop the supervisors
+
+    Returns (stopped_anything, gigabytes_freed).
+    """
+    try:
+        import psutil
+    except Exception:
+        return False, 0.0
+
+    before = psutil.virtual_memory().available
+
+    # 1. Ask nicely: this lets Ollama free the weights itself.
+    try:
+        import httpx
+
+        with httpx.Client(timeout=3.0) as client:
+            listing = client.get("http://127.0.0.1:11434/api/tags").json()
+            for model in listing.get("models", []):
+                name = model.get("model") or model.get("name")
+                if name:
+                    client.post("http://127.0.0.1:11434/api/generate",
+                                json={"model": name, "keep_alive": 0})
+        time.sleep(1.0)
+    except Exception:
+        log.debug("graceful unload skipped", exc_info=True)
+
+    # 2. Children first, so nothing can be orphaned.
+    stopped = 0
+    for names in (MODEL_HOSTS, SUPERVISORS):
+        victims = []
+        for proc in psutil.process_iter(["name"]):
+            try:
+                if (proc.info["name"] or "").lower() in names:
+                    victims.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        for proc in victims:
+            try:
+                proc.terminate()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        gone, alive = psutil.wait_procs(victims, timeout=timeout / 2)
+        for proc in alive:
+            try:
+                proc.kill()          # it had its chance
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        stopped += len(victims)
+
+    if stopped:
+        time.sleep(1.0)
+        freed = (psutil.virtual_memory().available - before) / 1e9
+        log.info("stopped Ollama (%d process%s), released %.2f GB",
+                 stopped, "" if stopped == 1 else "es", max(freed, 0.0))
+        return True, max(freed, 0.0)
+    return False, 0.0
+
+
 def memory_report() -> dict:
     """Current memory state, and whether it is tight enough to matter."""
     try:

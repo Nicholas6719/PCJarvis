@@ -127,6 +127,17 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?what(?:'s| is)\s+(?:currently\s+)?playing"
            r"\s*[.?!]?$", "now_playing"),
 
+    # ══ playing music ══ the desktop app, no account link
+    # Ordered after pause/resume so "resume" still means resume. The last
+    # pattern is deliberately broad -- "play <anything>" is unambiguous once
+    # the transport commands above have had their chance.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:play|put\s+on|start)"
+           r"(?:\s+(?:some|the))?\s+music\s*[.!]?$", "play_music"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?play\s*[.!]?$", "play_music"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:play|put\s+on|listen\s+to)"
+           r"\s+(?:some\s+)?(?P<q>.+?)(?:\s+on\s+spotify)?\s*[.!?]?$",
+           "play_music", lambda m: {"query": m.group("q").strip()}),
+
     # ══ audio ══
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:set |turn )?(?:the )?volume"
            r"(?:\s+(?:to|at))?\s+(?P<level>\d{1,3})\s*(?:percent)?\s*[.!]?$",
