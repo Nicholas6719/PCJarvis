@@ -20,7 +20,28 @@ something untrue.
 | F11 | Full screen |
 | Esc | Cut him off |
 | Say "Jarvis" over him | Interrupts mid-sentence |
-| "That's all" / "go to sleep" | Dismiss — he minimises and waits |
+| "That's all" / "go to sleep" | Stand down — minimises, still listening |
+| "Jarvis, shut down" | Close JARVIS entirely |
+
+---
+
+## Standing down vs shutting down
+
+Three different things, and he tells them apart:
+
+| Say | What happens |
+|---|---|
+| **"That's all"** · **"go to sleep"** · **"return to wake mode"** | Minimises, stays listening. Say "Jarvis" to bring him back full screen. |
+| **"Jarvis, shut down"** · "exit" · "quit" · "power down" | Closes the application. |
+| *"Shut down my computer"* | Shuts down the **laptop** — asks you to confirm first. |
+
+Courtesy in front is fine and expected:
+
+*"thank you, go to sleep"* · *"that's all, go to sleep"* · *"good work, go to
+sleep"* · *"thank you, return to wake mode"* · *"nice work, shut down"*
+
+The reactor shows which happened: **dim blue and barely breathing** when asleep,
+**collapsing inward** when shutting down.
 
 ---
 

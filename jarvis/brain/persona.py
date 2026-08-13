@@ -130,6 +130,15 @@ DISMISS_PHRASES = [
     "Right you are.",
 ]
 
+# Leaving entirely, as opposed to standing down. Slightly more final in
+# tone, because he will not be there afterwards.
+FAREWELL_PHRASES = [
+    "Shutting down. Goodbye, {address}.",
+    "Powering down. Until next time, {first_name}.",
+    "Very good. Shutting down.",
+    "Goodbye, {address}.",
+]
+
 CONFIRM_PHRASES = [
     "That one's irreversible. Shall I proceed?",
     "I'll need you to confirm that, {address}.",

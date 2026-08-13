@@ -21,6 +21,8 @@ const STATE_TEXT = {
   thinking:  ['THINKING',  'working on it'],
   tool:      ['EXECUTING', 'running a tool'],
   speaking:  ['SPEAKING',  ''],
+  sleeping:  ['ASLEEP',    'dismissed — say "Jarvis" to wake me'],
+  stopping:  ['SHUTTING DOWN', 'goodbye'],
   error:     ['FAULT',     'something went wrong'],
 };
 
@@ -153,6 +155,20 @@ window.onJarvis = function (ev) {
     case 'conversation.ended':
       closeConversation();
       addActivity('back to wake mode');
+      break;
+
+    case 'window.minimize':
+      closeConversation();
+      addActivity('standing down — still listening');
+      break;
+
+    case 'window.restore':
+      addActivity('awake');
+      break;
+
+    case 'app.quit':
+      closeConversation();
+      addActivity('shutting down', 'err');
       break;
 
     case 'barge_in':

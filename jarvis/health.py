@@ -86,6 +86,49 @@ def reap_orphaned_model_hosts() -> tuple[int, float]:
         return 0, 0.0
 
 
+def reap_orphaned_webviews() -> tuple[int, float]:
+    """Kill WebView2 helpers left behind by a previous JARVIS.
+
+    Deliberately narrow. WebView2 is shared infrastructure: sampling this
+    machine found helpers belonging to SearchHost.exe and Widgets.exe -- the
+    Start menu and the widgets panel. Killing those on a "looks orphaned"
+    heuristic would break parts of Windows.
+
+    So both conditions must hold: the process must name JARVIS.exe as its host
+    via --webview-exe-name, AND its parent must be gone. That combination can
+    only be our own debris.
+    """
+    try:
+        import psutil
+    except Exception:
+        return 0, 0.0
+
+    killed, freed = 0, 0.0
+    try:
+        for proc in psutil.process_iter(["name", "ppid", "cmdline",
+                                         "memory_info"]):
+            try:
+                if (proc.info["name"] or "").lower() != "msedgewebview2.exe":
+                    continue
+                cmdline = " ".join(proc.info["cmdline"] or []).lower()
+                if "--webview-exe-name=jarvis.exe" not in cmdline:
+                    continue
+                if psutil.pid_exists(proc.info["ppid"]):
+                    continue
+                freed += (proc.info["memory_info"].rss
+                          if proc.info["memory_info"] else 0)
+                proc.kill()
+                killed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        if killed:
+            log.info("cleaned up %d orphaned WebView2 helper%s (%.0f MB)",
+                     killed, "" if killed == 1 else "s", freed / 1e6)
+    except Exception:
+        log.debug("webview reaping failed", exc_info=True)
+    return killed, freed / 1e9
+
+
 def memory_report() -> dict:
     """Current memory state, and whether it is tight enough to matter."""
     try:
@@ -108,6 +151,9 @@ def memory_report() -> dict:
 def startup_check() -> dict:
     """Reap, then report. Called before anything heavy is loaded."""
     killed, freed = reap_orphaned_model_hosts()
+    wv_killed, wv_freed = reap_orphaned_webviews()
+    killed += wv_killed
+    freed += wv_freed
     report = memory_report()
     report["reclaimed_gb"] = freed
     report["orphans_killed"] = killed

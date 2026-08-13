@@ -124,6 +124,7 @@ class Bridge:
         # means the audio loop never touches window handles.
         BUS.on("window.minimize", lambda _: self.minimize())
         BUS.on("window.restore", lambda _: self.restore())
+        BUS.on("app.quit", lambda _: self._quit_from_engine())
 
         self._ready.set()
         self.push("ready", await asyncio.to_thread(lambda: {}))
@@ -183,6 +184,33 @@ class Bridge:
                 failures += 1
                 log.exception("SELFTEST: cycle %d FAILED", cycle + 1)
 
+        # The voice paths, driven through the real turn handler against the
+        # real window: dismissal must minimise and report SLEEPING, waking must
+        # restore full screen, and shutdown must actually close the app.
+        from ..state import State
+
+        for phrase in ["thank you, go to sleep", "return to wake mode"]:
+            try:
+                await self.app.handle(phrase)
+                await asyncio.sleep(1.4)
+                ok = (self.channel.minimized
+                      and self.app.state is State.SLEEPING)
+                log.info("SELFTEST: %r -> minimised=%s state=%s  %s",
+                         phrase, self.channel.minimized,
+                         self.app.state.value, "OK" if ok else "WRONG")
+                if not ok:
+                    failures += 1
+
+                self.restore()
+                await asyncio.sleep(1.4)
+                log.info("SELFTEST: restored -> minimised=%s fullscreen=%s",
+                         self.channel.minimized, self.channel.fullscreen_active)
+                if self.channel.minimized or not self.channel.fullscreen_active:
+                    failures += 1
+            except Exception:
+                failures += 1
+                log.exception("SELFTEST: voice dismissal FAILED")
+
         # And the state the interface reports must match reality.
         log.info("SELFTEST: minimized=%s fullscreen_active=%s",
                  self.channel.minimized, self.channel.fullscreen_active)
@@ -191,6 +219,15 @@ class Bridge:
                  if failures == 0 else f"FAILED with {failures} errors")
         _time.sleep(0.5)
         self.stop()
+
+    def _quit_from_engine(self) -> None:
+        """He was told to shut down. Close the window and end the process.
+
+        Runs on the asyncio thread, so the actual teardown is handed to a
+        plain thread: destroying the window from here would be the same
+        cross-thread mistake that crashed restore.
+        """
+        threading.Thread(target=self.stop, daemon=True).start()
 
     # ── window control ─────────────────────────────────────────────
     def minimize(self) -> None:

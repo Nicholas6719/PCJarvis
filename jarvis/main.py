@@ -48,17 +48,44 @@ NO = {"no", "nope", "cancel", "stop", "don't", "do not", "negative",
       "never mind", "nevermind", "forget it"}
 
 # Ending the conversation deliberately, rather than by timeout.
-# Leading filler is common and was fatal: "no, go to sleep" failed to match,
-# fell through to the model, and became an attempt to suspend the laptop.
-# "go to sleep" addressed to JARVIS always means JARVIS -- suspending the
-# machine requires saying so explicitly.
+# People do not issue bare commands; they thank you first. "Thank you, go to
+# sleep" and "good work, go to sleep" are the natural forms, and an earlier
+# version matched neither -- they fell through to the model, where "go to sleep"
+# became an attempt to suspend the laptop.
+#
+# So any amount of courtesy may precede the actual instruction. Each of these
+# can also stand alone as a dismissal in its own right ("that's all"), which the
+# regex handles by letting the prefix group match zero times.
+_COURTESY = (
+    r"(?:thank\s*you(?:\s+very\s+much)?|thanks(?:\s+a\s+lot)?|cheers|"
+    r"good\s+(?:work|job|stuff)|great\s+(?:work|job)|nice\s+(?:work|job)|"
+    r"well\s+done|excellent|perfect|brilliant|awesome|lovely|nice|"
+    r"that(?:'s| is)\s+all|that(?:'ll| will)\s+be\s+all|"
+    r"ok|okay|alright|all\s+right|right|cool|got\s+it|understood|"
+    r"sounds\s+good|no|nope|yes|yeah|yep|actually|just|well|and|then)"
+)
+_PREFIX = (rf"^(?:(?:jarvis[,\s]+)?{_COURTESY}[,.!\s]+)*"
+           r"(?:jarvis[,\s]+)?(?:please\s+)?")
+
+# Stand down, but keep listening. He stays resident and the wake word still
+# works -- this is not an exit.
 DISMISS = re.compile(
-    r"^(?:(?:no|nope|yes|yeah|ok|okay|actually|just|well|and|then)[,\s]+)*"
-    r"(?:jarvis[,\s]+)?(?:please\s+)?"
-    r"(?:that(?:'s| is) all|that will be all|go to sleep|goodbye|good bye|"
-    r"bye|thanks?,? that(?:'s| is) it|stop listening|return to wake mode|"
+    _PREFIX +
+    r"(?:that(?:'s| is) all|that(?:'ll| will) be all|go(?:ing)? to sleep|"
+    r"goodbye|good bye|bye|stop listening|"
+    r"(?:go\s+)?(?:back|return)\s+to\s+wake\s+mode|wake mode|"
     r"dismissed|nothing else|we(?:'re| are) done|sleep|stand down|"
-    r"never ?mind|forget it)"
+    r"never ?mind|forget it|that is it|that(?:'s) it)"
+    r"[.!\s]*$", re.I)
+
+# Shut JARVIS himself down and close the application. Anchored at the end, so
+# "shut down my computer" cannot match here -- that is a different, destructive
+# action which goes through confirmation.
+SHUTDOWN_SELF = re.compile(
+    _PREFIX +
+    r"(?:shut\s*down(?:\s+(?:yourself|jarvis))?|shut\s+yourself\s+down|"
+    r"exit|quit|power\s+(?:down|off)|terminate|"
+    r"close\s+(?:yourself|jarvis|the\s+app))"
     r"[.!\s]*$", re.I)
 
 
@@ -254,7 +281,17 @@ class Jarvis:
         if self.memory:
             self.memory.log_turn("user", text)
 
-        # "That's all" -- deliberate dismissal.
+        # "Shut down" -- close the application. Checked before dismissal, since
+        # the two share courtesy prefixes and this is the stronger instruction.
+        # Anything about the *computer* falls through to the model and its
+        # confirmation gate; this only ever ends JARVIS.
+        if SHUTDOWN_SELF.match(text.strip()):
+            log.info("shutdown requested by voice")
+            await self.speak(persona.pick(persona.FAREWELL_PHRASES, self.cfg))
+            await self.quit_now()
+            return
+
+        # "That's all" -- stand down but stay resident.
         if DISMISS.match(text.strip()):
             await self.speak(persona.pick(persona.DISMISS_PHRASES, self.cfg))
             await self.sleep_now()
@@ -335,6 +372,10 @@ class Jarvis:
     # ── wake / sleep ───────────────────────────────────────────────
     def _on_wake(self) -> None:
         self.chime()
+        # Whatever he was -- idle, asleep -- he is awake now.
+        asyncio.create_task(BUS.emit("conversation.open",
+                                     seconds=self.cfg.get(
+                                         "conversation.window_s", 15)))
         if self.listener:
             self.listener.extend_conversation()
         asyncio.create_task(self.set_state(State.LISTENING))
@@ -387,13 +428,32 @@ class Jarvis:
             await self.set_state(State.IDLE)
 
     async def sleep_now(self) -> None:
-        """Return to wake mode and get out of the way."""
+        """Return to wake mode and get out of the way. Still listening."""
         if self.listener:
             self.listener.end_conversation()
-        await self.set_state(State.IDLE)
         await BUS.emit("conversation.ended")
+        # SLEEPING, not IDLE: the interface shows a distinctly dormant
+        # reactor so a glance tells him whether he was dismissed or simply
+        # timed out.
+        await self.set_state(State.SLEEPING)
         if self.cfg.get("ui.minimize_on_sleep", True):
             await BUS.emit("window.minimize")
+
+    async def quit_now(self) -> None:
+        """Close JARVIS entirely.
+
+        Distinct from sleep: nothing is left listening, the window closes, and
+        the process exits. The farewell has already been spoken by the time we
+        get here, so playback is allowed to drain before anything is torn down.
+        """
+        log.info("shutting down at the user's request")
+        await self.set_state(State.STOPPING)
+        if self.speaker:
+            await self.speaker.wait_until_done(timeout=8)
+        if self.listener:
+            self.listener.end_conversation()
+        self.running = False
+        await BUS.emit("app.quit")
 
     # ── main loop ──────────────────────────────────────────────────
     async def run(self, greet: bool = True) -> None:
@@ -413,6 +473,11 @@ class Jarvis:
         listen_task = asyncio.create_task(self.listener.run())
         listen_task.add_done_callback(self._listener_died)
 
+        # Headless has no window to close, so the quit signal has to stop
+        # the loop itself.
+        quit_signal = asyncio.Event()
+        BUS.on("app.quit", lambda _: quit_signal.set())
+
         if greet:
             # Not conversational: he has not asked for anything yet, so the
             # window stays shut and the wake word is still required.
@@ -421,7 +486,7 @@ class Jarvis:
 
         try:
             async for text in self.listener.utterances():
-                if not self.running:
+                if not self.running or quit_signal.is_set():
                     break
                 self._turn = asyncio.create_task(self.handle(text))
                 try:

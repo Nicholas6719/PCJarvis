@@ -275,6 +275,60 @@ async def test_conversation_state(app, rec) -> None:
           f"tools={rec.tools()}")
 
 
+async def test_dismiss_and_shutdown(app, rec) -> None:
+    """Standing down, leaving, and suspending the laptop are three different
+    things, and the HUD has to show which one happened."""
+    print("\n[dismiss/shutdown] three outcomes, three HUD states")
+    from jarvis.state import State
+
+    for phrase in ["thank you, go to sleep",
+                   "that's all, go to sleep",
+                   "good work, go to sleep",
+                   "return to wake mode",
+                   "thank you, return to wake mode"]:
+        app.listener.extend_conversation()
+        app.state = State.IDLE
+        rec.clear()
+        await app.handle(phrase)
+        kinds = rec.kinds()
+        ok = ("window.minimize" in kinds
+              and not app.listener.in_conversation
+              and app.state is State.SLEEPING
+              and "app.quit" not in kinds)
+        check(f"dismiss: {phrase[:34]}", ok,
+              f"state={app.state.value} minimise={'window.minimize' in kinds}")
+
+    # The HUD must be told, not merely have it happen.
+    states = [e.get("state") for e in rec.events if e.get("event") == "state"]
+    check("HUD is told he is asleep", "sleeping" in states, str(states))
+
+    # Shutting JARVIS down.
+    app.listener.extend_conversation()
+    app.state = State.IDLE
+    rec.clear()
+    await app.handle("jarvis, shut down")
+    kinds = rec.kinds()
+    states = [e.get("state") for e in rec.events if e.get("event") == "state"]
+    check("shutdown asks the app to quit", "app.quit" in kinds, str(kinds[-4:]))
+    check("HUD is told he is stopping", "stopping" in states, str(states))
+    check("shutdown spoke a farewell", bool(rec.spoken()), rec.spoken()[:50])
+    app.running = True   # the harness continues
+
+    # And the laptop is a different matter entirely.
+    app.listener.extend_conversation()
+    app.state = State.IDLE
+    rec.clear()
+    await app.handle("shut down my computer")
+    kinds = rec.kinds()
+    check("'shut down my computer' does NOT quit JARVIS",
+          "app.quit" not in kinds, str(kinds[-4:]))
+    check("...and does not silently shut the machine down",
+          "shutdown_computer" not in rec.tools()
+          or "confirm" in kinds,
+          f"tools={rec.tools()} kinds={kinds[-3:]}")
+    app.running = True
+
+
 async def test_documents(app, rec) -> None:
     print("\n[documents] the file must exist where he asked")
     from jarvis.tools.documents import OUTPUT_DIR
@@ -336,6 +390,7 @@ async def main() -> int:
         await test_deterministic_speed(app, rec)
         await test_accuracy(app, rec)
         await test_conversation_state(app, rec)
+        await test_dismiss_and_shutdown(app, rec)
         await test_documents(app, rec)
         if not args.fast:
             await test_model_path(app, rec)

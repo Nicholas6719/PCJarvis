@@ -260,6 +260,8 @@ body[data-state="listening"] { --accent: #5AF0DC; }
 body[data-state="thinking"]  { --accent: #78B4FF; }
 body[data-state="tool"]      { --accent: #B496FF; }
 body[data-state="speaking"]  { --accent: var(--gold); }
+body[data-state="sleeping"]  { --accent: #2E5C7A; }
+body[data-state="stopping"]  { --accent: #966E5A; }
 body[data-state="error"]     { --accent: var(--danger); }
 body                         { --accent: var(--cyan); }
 
@@ -378,3 +380,17 @@ body[data-state="tool"] #state-detail::after {
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
   transition: width .12s linear;
 }
+
+/* ── dormant ───────────────────────────────────────────────────
+   Dismissed, but not off: the whole frame dims and the scan slows
+   so a glance across the room says "asleep" rather than "idle". */
+body[data-state="sleeping"] #grid { opacity: .35; }
+body[data-state="sleeping"] #vignette::after { animation-duration: 18s; }
+body[data-state="sleeping"] #transcript,
+body[data-state="sleeping"] #activity { opacity: .55; }
+body[data-state="sleeping"] #state-label { letter-spacing: 6px; }
+
+/* ── leaving ───────────────────────────────────────────────────
+   Everything fades as the reactor collapses. */
+body[data-state="stopping"] main { opacity: .35; transition: opacity 1.4s ease; }
+body[data-state="stopping"] #vignette::after { animation: none; }

@@ -11,6 +11,9 @@
      thinking    counter-rotation accelerates, particles pull inward
      tool        a scanner sweeps the dial, segments latch as it passes
      speaking    gold, pulsing on the actual output envelope
+     sleeping    dim and cold, one very slow breath -- dismissed, but the
+                 wake word is still live
+     stopping    rings collapse inward and fade; he is leaving
 
    State changes fire a shockwave so transitions register peripherally.
    ══════════════════════════════════════════════════════════════ */
@@ -22,6 +25,8 @@ export const PALETTE = {
   thinking:  [120, 180, 255],
   tool:      [180, 150, 255],
   speaking:  [255, 201, 107],
+  sleeping:  [46, 92, 122],    // dormant: dim, cold, obviously off duty
+  stopping:  [150, 110, 90],   // winding down for good
   error:     [255, 107, 107],
 };
 
@@ -45,6 +50,7 @@ export class Reactor {
     this.smoothMic = 0;
     this.smoothOut = 0;
     this.bootProgress = 0;
+    this.stopProgress = 0;
 
     // Waveform history ring, fed by whichever level is relevant right now.
     this.bins = new Array(72).fill(0);
@@ -121,6 +127,14 @@ export class Reactor {
     } else if (st === 'booting') {
       targetEnergy = 0.08 + this.bootProgress * 0.2;
       spinRate = 1.2;
+    } else if (st === 'sleeping') {
+      // One slow breath every eight seconds. Unmistakably dormant, but
+      // never fully dark -- he is still listening for his name.
+      targetEnergy = 0.05 + (Math.sin(this.t * 0.78) + 1) * 0.025;
+      spinRate = 0.08;
+    } else if (st === 'stopping') {
+      targetEnergy = Math.max(0, 0.3 - this.t * 0.0);
+      spinRate = 0.15;
     } else if (st === 'error') {
       targetEnergy = 0.3 + Math.sin(this.t * 12) * 0.15;
       spinRate = 0.2;
@@ -145,7 +159,14 @@ export class Reactor {
     const R = Math.min(w, h) * 0.42;
     const c = this.colour;
     const E = Math.min(this.energy, 1);
-    const assembling = this.state === 'booting' ? Math.min(this.bootProgress, 1) : 1;
+    let assembling = this.state === 'booting'
+      ? Math.min(this.bootProgress, 1) : 1;
+    if (this.state === 'stopping') {
+      // The assembly animation, run in reverse: the rings draw back in
+      // over about a second and a half, then he is gone.
+      this.stopProgress = Math.min(1, (this.stopProgress || 0) + 0.011);
+      assembling = 1 - this.stopProgress;
+    }
 
     ctx.clearRect(0, 0, w, h);
 
