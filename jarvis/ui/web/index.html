@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>J.A.R.V.I.S.</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="grid"></div>
+<div id="vignette"></div>
+
+<header id="titlebar">
+  <div class="brand">
+    <span class="mark">J.A.R.V.I.S.</span>
+    <span class="sub">Just A Rather Very Intelligent System</span>
+  </div>
+  <div class="win-controls">
+    <button id="btn-min"  title="Minimise">&#8211;</button>
+    <button id="btn-quit" title="Close">&#10005;</button>
+  </div>
+</header>
+
+<main>
+  <!-- ── left: the reactor ─────────────────────────────────────── -->
+  <section id="left">
+    <canvas id="reactor" width="440" height="440"></canvas>
+
+    <div id="status">
+      <div id="state-label">booting</div>
+      <div id="state-detail">bringing systems online</div>
+    </div>
+
+    <div id="controls">
+      <button id="btn-talk" class="primary" title="Push to talk">
+        <span class="dot"></span> TALK
+      </button>
+      <button id="btn-mute" title="Mute microphone">MIC ON</button>
+      <button id="btn-stop" title="Interrupt">STOP</button>
+    </div>
+
+    <div id="telemetry">
+      <div class="gauge"><label>CPU</label>
+        <div class="bar"><i id="g-cpu"></i></div><span id="v-cpu">--</span></div>
+      <div class="gauge"><label>MEM</label>
+        <div class="bar"><i id="g-mem"></i></div><span id="v-mem">--</span></div>
+      <div class="gauge"><label>PWR</label>
+        <div class="bar"><i id="g-bat"></i></div><span id="v-bat">--</span></div>
+    </div>
+  </section>
+
+  <!-- ── right: conversation ───────────────────────────────────── -->
+  <section id="right">
+    <div id="transcript" role="log" aria-live="polite"></div>
+
+    <div id="composer">
+      <input id="input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Type to JARVIS, or say &quot;Hey JARVIS&quot;">
+      <button id="btn-send">SEND</button>
+    </div>
+
+    <aside id="activity">
+      <div class="act-head">SYSTEM ACTIVITY</div>
+      <div id="act-log"></div>
+    </aside>
+  </section>
+</main>
+
+<div id="boot-overlay">
+  <div class="boot-inner">
+    <div class="boot-ring"></div>
+    <div class="boot-text">INITIALISING</div>
+    <div class="boot-step">loading models</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

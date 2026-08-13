@@ -1,0 +1,104 @@
+"""Tool selection.
+
+This exists because of one measurement. On this machine Ollama re-evaluates the
+whole prompt whenever its prefix changes, at ~90-150 tokens/second, but replays
+an *unchanged* prefix from the KV cache at ~3,000 tokens/second. The tool
+schemas sit in that prefix. So the question is not "how few tools can we send"
+but "can we send the same ones every time".
+
+Measured across a five-turn conversation on qwen2.5:7b, GPU-resident:
+
+    all 37 tools, stable      1.9s/turn   but 0/5 tool calls -- too many
+                                          options and it stops choosing at all
+    10 tools, re-routed       8.6s/turn   5/5 tool calls, cache missed every
+                                          turn because the set kept changing
+    22 tools, stable          2.3s/turn   5/5 tool calls
+
+So: a fixed core set, always sent, always in the same order. Rare tools are
+admitted only on an unambiguous keyword, which costs one cache miss on the turn
+that needs them -- a fair price for a tool used once a month.
+
+The ordering is deliberately deterministic. A set that reorders between turns
+is a different prefix, and a different prefix is a cache miss.
+"""
+from __future__ import annotations
+
+import logging
+import re
+
+from .registry import REGISTRY
+
+log = logging.getLogger("jarvis.tools.router")
+
+# Always sent, always in this order. Covers everything he asks for day to day.
+CORE: tuple[str, ...] = (
+    # system
+    "get_time", "get_battery", "get_system_stats", "get_volume", "set_volume",
+    "open_app", "close_app", "take_screenshot", "lock_screen",
+    # web
+    "web_search", "get_weather", "get_news", "read_webpage",
+    # files
+    "find_files", "read_file", "open_file",
+    # media
+    "play_pause", "pause_media", "next_track", "now_playing",
+    # memory
+    "remember", "recall",
+)
+
+# Everything else, admitted only on an unambiguous word. Each entry costs a
+# cache miss on the turn it appears, so the triggers are kept tight.
+EXTRAS: dict[str, set[str]] = {
+    "set_brightness":      {"brightness", "dim", "brighter", "dimmer"},
+    "set_mute":            {"mute", "unmute", "silence"},
+    "resume_media":        {"resume", "unpause"},
+    "previous_track":      {"previous", "back", "rewind", "replay"},
+    "open_spotify_search": {"spotify", "playlist", "album"},
+    "list_running_apps":   {"running", "open apps", "what's open"},
+    "focus_window":        {"focus", "switch", "bring up", "foreground"},
+    "read_clipboard":      {"clipboard", "copied"},
+    "write_clipboard":     {"clipboard", "copy"},
+    "list_recent_files":   {"recent", "lately", "latest files"},
+    "forget":              {"forget", "delete that", "remove that"},
+    "cancel_shutdown":     {"cancel"},
+    "sleep_computer":      {"sleep", "suspend", "hibernate"},
+    "shutdown_computer":   {"shutdown", "shut down", "restart", "reboot"},
+    "run_command":         {"powershell", "command line", "run command",
+                            "terminal command", "script"},
+}
+
+_WORD = re.compile(r"[a-z']+")
+
+
+def select(query: str, limit: int | None = None) -> list[dict]:
+    """Schemas to offer for this utterance: the stable core, plus any extras
+    the wording clearly asks for."""
+    names = list(CORE)
+
+    lowered = query.lower()
+    words = set(_WORD.findall(lowered))
+    for name, triggers in EXTRAS.items():
+        if name in names or name not in REGISTRY:
+            continue
+        # Multi-word triggers are substring matches; single words must be whole
+        # words, so "back" in "background" does not summon previous_track.
+        if any((t in lowered) if " " in t else (t in words) for t in triggers):
+            names.append(name)
+
+    schemas = [REGISTRY[n].schema for n in names if n in REGISTRY]
+    if limit and len(schemas) > limit:
+        schemas = schemas[:limit]
+
+    if len(names) > len(CORE):
+        log.debug("admitted extras: %s", names[len(CORE):])
+    return schemas
+
+
+def select_names(query: str, limit: int | None = None) -> list[str]:
+    """The selection as names -- used by the diagnostics."""
+    return [s["function"]["name"] for s in select(query, limit)]
+
+
+def warm_prefix_query() -> str:
+    """A query that selects exactly the core set, for warming the KV cache at
+    startup so the first real question is not the one that pays for it."""
+    return "hello"

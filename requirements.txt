@@ -1,0 +1,46 @@
+# ── JARVIS · Windows ──────────────────────────────────────────────
+# Everything here is free and runs locally. No paid services.
+# Minimum-version constraints rather than hard pins: these packages share a lot
+# of transitive dependencies and exact pinning makes the resolver unsolvable.
+
+# Core audio I/O + DSP
+sounddevice>=0.5.1
+numpy>=2.0,<3
+scipy>=1.14
+soundfile>=0.13
+
+# Wake word · VAD · speech-to-text  (all ONNX, all CPU)
+openwakeword>=0.6.0
+onnxruntime>=1.20
+faster-whisper>=1.1.0
+
+# Text-to-speech (Kokoro-82M, Apache-2.0)
+kokoro-onnx>=0.4.9
+
+# Local LLM
+ollama>=0.4.5
+
+# Desktop window (uses Windows' built-in WebView2)
+pywebview>=5.3
+
+# Web access tools
+ddgs>=9.0
+httpx>=0.28
+trafilatura>=2.0
+
+# System control tools
+psutil>=6.1
+pycaw>=20240210
+comtypes>=1.4
+pygetwindow>=0.0.9
+pyautogui>=0.9.54
+pyperclip>=1.9
+keyboard>=0.13.5
+winsdk>=1.0.0b10
+pillow>=10.3
+
+# Memory: semantic recall (ONNX, CPU) — FTS5 keyword search is stdlib
+fastembed>=0.6
+
+# Config
+pyyaml>=6.0

@@ -1,0 +1,7 @@
+.venv/
+models/
+logs/
+data/
+__pycache__/
+*.pyc
+config.local.yaml
