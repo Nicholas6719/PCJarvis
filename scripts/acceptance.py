@@ -62,10 +62,19 @@ def test_intents() -> None:
         ("lock my screen", "lock_screen"),
         ("remember that I use Brave", "remember"),
         ("jarvis, pause the music", "pause_media"),
-        # These must NOT shortcut -- they need the model.
+        # System readings are deterministic now: routing them through the
+        # model cost 5-15s and let it paraphrase a measurement into
+        # something untrue.
+        ("what is my cpu", "get_system_stats"),
+        ("how much memory am I using", "get_system_stats"),
+        ("10 second timer", "set_timer"),
+        ("open youtube", "open_website"),
+        ("directions to Boston", "get_directions"),
+        # These genuinely need the model.
         ("what is the weather", None),
         ("open spotify and play jazz", None),
-        ("how much memory am I using", None),
+        ("explain quantum computing", None),
+        ("create a pdf of our conversation", None),
     ]
     bad = []
     for text, expect in cases:

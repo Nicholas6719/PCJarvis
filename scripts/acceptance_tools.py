@@ -121,7 +121,9 @@ async def test_timers() -> None:
 async def test_system() -> None:
     print("\n[system] -- real readings, not plausible ones")
     for name, expect in [
-        ("get_battery", "percent"), ("get_system_stats", "CPU"),
+        # Numerals now, not words: readings go on screen as "100%" and are
+        # converted to speech separately by voice/pronounce.py.
+        ("get_battery", "%"), ("get_system_stats", "CPU"),
         ("get_time", ":"), ("get_volume", "percent"),
         ("read_clipboard", ""), ("list_running_apps", ""),
         ("now_playing", ""), ("list_recent_files", ""),
@@ -132,6 +134,14 @@ async def test_system() -> None:
 
     r = await call("find_files", name="config", limit=3)
     check("find_files", "config" in r.lower(), r[:58].replace("\n", " "))
+
+    # focused readings must answer only what was asked
+    cpu = await call("get_system_stats", component="cpu")
+    check("cpu reading is focused",
+          "CPU" in cpu and "drive" not in cpu.lower(), cpu[:52])
+    disk = await call("get_system_stats", component="disk")
+    check("disk reading is focused",
+          "drive" in disk.lower() and "CPU" not in disk, disk[:52])
 
     before = await call("get_volume")
     await call("set_volume", level=42)

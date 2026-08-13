@@ -165,6 +165,10 @@ class Bridge:
             try:
                 self.window.minimize()
                 self._minimized = True
+                # Windows drops the full-screen style on minimise, so the flag
+                # must drop with it -- otherwise restore believes it is still
+                # full screen and comes back as a plain window.
+                self._is_fullscreen = False
                 log.info("minimised to wake mode")
             except Exception:
                 log.debug("minimise failed")

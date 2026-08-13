@@ -268,21 +268,47 @@ def take_screenshot() -> str:
 #  Telemetry
 # ══════════════════════════════════════════════════════════════════
 @tool(category="system")
-def get_system_stats() -> str:
-    """Report CPU load, memory use, disk space and battery level."""
+def get_system_stats(component: str = "all") -> str:
+    """Report system status. Ask for one component when only one was requested.
+
+    Args:
+        component: "cpu", "memory", "disk", "battery", or "all". If he asked
+            about the CPU, pass "cpu" -- do not read out everything.
+    """
+    which = (component or "all").lower().strip()
+    if which in ("ram", "mem"):
+        which = "memory"
+    if which in ("storage", "drive", "space"):
+        which = "disk"
+    if which in ("power", "charge"):
+        which = "battery"
+
+    if which == "cpu":
+        return f"CPU is at {psutil.cpu_percent(interval=0.4):.0f}%."
+    if which == "memory":
+        mem = psutil.virtual_memory()
+        return (f"Memory is at {mem.percent:.0f}%, using {mem.used/1e9:.1f} GB "
+                f"of {mem.total/1e9:.0f} GB.")
+    if which == "disk":
+        disk = psutil.disk_usage("C:/")
+        return (f"The C drive has {disk.free/1e9:.0f} GB free of "
+                f"{disk.total/1e9:.0f} GB.")
+    if which == "battery":
+        return get_battery()
+
     cpu = psutil.cpu_percent(interval=0.4)
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage("C:/")
     parts = [
-        f"CPU at {cpu:.0f} percent",
-        f"memory at {mem.percent:.0f} percent "
-        f"({mem.used/1e9:.1f} of {mem.total/1e9:.0f} gigabytes)",
-        f"C drive has {disk.free/1e9:.0f} gigabytes free",
+        f"CPU at {cpu:.0f}%",
+        f"memory at {mem.percent:.0f}% ({mem.used/1e9:.1f} of "
+        f"{mem.total/1e9:.0f} GB)",
+        f"C drive with {disk.free/1e9:.0f} GB free",
     ]
     battery = psutil.sensors_battery()
     if battery:
-        state = "charging" if battery.power_plugged else "on battery"
-        parts.append(f"battery at {battery.percent:.0f} percent, {state}")
+        parts.append(f"battery at {battery.percent:.0f}%, "
+                     f"{'charging' if battery.power_plugged else 'on battery'}")
     return "; ".join(parts) + "."
 
 
@@ -292,12 +318,20 @@ def get_battery() -> str:
     battery = psutil.sensors_battery()
     if not battery:
         return "No battery detected."
-    text = f"Battery is at {battery.percent:.0f} percent"
+
+    # Stated flatly and only once. An earlier version said "at 100 percent and
+    # charging" and the model relayed it as "fully charged but not currently
+    # being charged" -- the opposite of the truth. Short, unambiguous sentences
+    # survive paraphrasing.
     if battery.power_plugged:
-        return text + " and charging."
+        if battery.percent >= 99:
+            return "Battery: 100%. Plugged in and charging."
+        return f"Battery: {battery.percent:.0f}%. Plugged in and charging."
+
+    text = f"Battery: {battery.percent:.0f}%. Running on battery"
     if battery.secsleft and battery.secsleft > 0:
         hours, minutes = divmod(int(battery.secsleft) // 60, 60)
-        text += f", roughly {hours} hours {minutes} minutes remaining"
+        text += f", about {hours} hours {minutes} minutes left"
     return text + "."
 
 
@@ -351,11 +385,26 @@ def lock_screen() -> str:
 
 @tool(category="system", destructive=True)
 def sleep_computer() -> str:
-    """Put the computer to sleep."""
-    subprocess.run(
-        ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], check=False
-    )
-    return "Going to sleep."
+    """Suspend the COMPUTER itself. Only for an explicit request to sleep the
+    machine -- "go to sleep" on its own means JARVIS should stand down, not
+    that the laptop should suspend."""
+    # rundll32 powrprof.dll,SetSuspendState quietly does nothing on machines
+    # where hibernation is disabled, and reports success either way. Calling
+    # the API directly actually suspends.
+    try:
+        import ctypes
+
+        ok = ctypes.windll.powrprof.SetSuspendState(False, False, False)
+        if ok:
+            return "Suspending the machine."
+    except Exception as e:
+        log.warning("SetSuspendState failed: %s", e)
+
+    r = subprocess.run(["shutdown", "/h"], capture_output=True, check=False)
+    if r.returncode == 0:
+        return "Suspending the machine."
+    return ("I could not suspend the machine. Sleep may be disabled in your "
+            "power settings.")
 
 
 @tool(category="system", destructive=True)

@@ -47,10 +47,17 @@ NO = {"no", "nope", "cancel", "stop", "don't", "do not", "negative",
       "never mind", "nevermind", "forget it"}
 
 # Ending the conversation deliberately, rather than by timeout.
+# Leading filler is common and was fatal: "no, go to sleep" failed to match,
+# fell through to the model, and became an attempt to suspend the laptop.
+# "go to sleep" addressed to JARVIS always means JARVIS -- suspending the
+# machine requires saying so explicitly.
 DISMISS = re.compile(
-    r"^(?:jarvis[,\s]+)?(?:that(?:'s| is) all|that will be all|go to sleep|"
-    r"goodbye|good bye|bye|thanks?,? that(?:'s| is) it|stop listening|"
-    r"return to wake mode|dismissed|nothing else|we(?:'re| are) done)"
+    r"^(?:(?:no|nope|yes|yeah|ok|okay|actually|just|well|and|then)[,\s]+)*"
+    r"(?:jarvis[,\s]+)?(?:please\s+)?"
+    r"(?:that(?:'s| is) all|that will be all|go to sleep|goodbye|good bye|"
+    r"bye|thanks?,? that(?:'s| is) it|stop listening|return to wake mode|"
+    r"dismissed|nothing else|we(?:'re| are) done|sleep|stand down|"
+    r"never ?mind|forget it)"
     r"[.!\s]*$", re.I)
 
 
@@ -90,6 +97,7 @@ class Jarvis:
         self._turn: asyncio.Task | None = None
         self._interrupted = False
         self._last_proactive = ""
+        self._warm_task: asyncio.Task | None = None
 
     # ── state ──────────────────────────────────────────────────────
     async def set_state(self, state: State) -> None:
@@ -132,12 +140,18 @@ class Jarvis:
             asyncio.to_thread(Voice, self.cfg),
         )
 
+        # Whisper and Kokoro warm in about two seconds and are needed the
+        # moment he speaks, so they block. The language model takes ~35s to
+        # load onto the GPU and prime its cache -- and nothing deterministic
+        # needs it, so it warms in the background. Boot drops from forty
+        # seconds to about four, and "set a timer" works immediately;
+        # only the first question that genuinely needs the model waits.
         await BUS.emit("boot", step="warming")
         await asyncio.gather(
             asyncio.to_thread(stt.warm),
             asyncio.to_thread(self.voice.warm),
-            self.brain.warm(),
         )
+        self._warm_task = asyncio.create_task(self._warm_brain())
 
         self.mic = Microphone(
             sample_rate=self.cfg.get("audio.sample_rate", 16000),
@@ -160,9 +174,27 @@ class Jarvis:
         await self.set_state(State.IDLE)
         return True
 
+    async def _warm_brain(self) -> None:
+        """Load the model and prime its cache without holding up startup."""
+        t0 = time.perf_counter()
+        try:
+            await self.brain.warm()
+            log.info("brain warm after %.1fs (deterministic commands were "
+                     "available throughout)", time.perf_counter() - t0)
+            await BUS.emit("brain.ready")
+        except Exception:
+            log.exception("background warm failed")
+
     # ── speaking ───────────────────────────────────────────────────
-    async def speak(self, text: str, wait: bool = True) -> bool:
-        """Queue speech. Returns False if he was interrupted."""
+    async def speak(self, text: str, wait: bool = True,
+                    conversational: bool = True) -> bool:
+        """Queue speech. Returns False if he was interrupted.
+
+        conversational=False is for things he did not ask for -- the startup
+        greeting, mainly. Those must not open a conversation window, or the
+        interface announces "no wake word needed" when the wake word is in fact
+        still required.
+        """
         if not text.strip() or not self.speaker or not self.listener:
             return True
         await self.set_state(State.SPEAKING)
@@ -172,16 +204,23 @@ class Jarvis:
         if not wait:
             return True
         finished = await self.speaker.wait_until_done()
-        await self._after_speaking()
+        await self._after_speaking(conversational=conversational)
         return finished
 
-    async def _after_speaking(self) -> None:
+    async def _after_speaking(self, conversational: bool = True) -> None:
         """Settle, flush the mic, and reopen the conversation window."""
         if not self.listener:
             return
         guard = self.cfg.get("vad.post_speech_guard_ms", 300) / 1000
         await asyncio.sleep(guard)
         self.listener.end_speaking()
+
+        if not conversational:
+            self.listener.end_conversation()
+            await BUS.emit("conversation.ended")
+            await self.set_state(State.IDLE)
+            return
+
         await BUS.emit("conversation.open",
                        seconds=self.cfg.get("conversation.window_s", 15))
         await self.set_state(State.LISTENING if self.listener.in_conversation
@@ -197,7 +236,9 @@ class Jarvis:
         assert self.brain is not None and self.listener is not None
 
         self._interrupted = False
-        self.listener.extend_conversation()
+        # Hold the window open for the whole turn. Without this a slow reply
+        # expires it mid-answer and he drops to wake mode while still speaking.
+        self.listener.suspend_conversation()
         if self.memory:
             self.memory.log_turn("user", text)
 
@@ -276,6 +317,7 @@ class Jarvis:
             self.speaker.say(persona.pick(persona.UNCLEAR_PHRASES, self.cfg))
 
         await self.speaker.wait_until_done()
+        self.listener.resume_conversation()
         await self._after_speaking()
 
     # ── wake / sleep ───────────────────────────────────────────────
@@ -328,6 +370,10 @@ class Jarvis:
         await BUS.emit("proactive.spoken", text=text)
         await self.speak(text)
 
+    async def _on_conversation_ended(self) -> None:
+        if self.state in (State.LISTENING, State.IDLE):
+            await self.set_state(State.IDLE)
+
     async def sleep_now(self) -> None:
         """Return to wake mode and get out of the way."""
         if self.listener:
@@ -348,13 +394,18 @@ class Jarvis:
         BUS.on("barge_in", lambda _: self._on_barge_in())
         BUS.on("proactive", lambda ev: asyncio.create_task(
             self._say_proactively(ev.get("text", ""))))
+        # When the window closes the interface must stop saying "listening".
+        BUS.on("conversation.ended", lambda _: asyncio.create_task(
+            self._on_conversation_ended()))
 
         listen_task = asyncio.create_task(self.listener.run())
         listen_task.add_done_callback(self._listener_died)
 
         if greet:
-            await self.speak(persona.pick(persona.GREETINGS, self.cfg))
-            self.listener.end_conversation()  # a greeting is not a conversation
+            # Not conversational: he has not asked for anything yet, so the
+            # window stays shut and the wake word is still required.
+            await self.speak(persona.pick(persona.GREETINGS, self.cfg),
+                             conversational=False)
 
         try:
             async for text in self.listener.utterances():

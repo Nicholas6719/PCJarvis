@@ -23,6 +23,35 @@ log = logging.getLogger("jarvis.tools.documents")
 OUTPUT_DIR = Path.home() / "Documents" / "JARVIS"
 _SAFE = re.compile(r"[^A-Za-z0-9 ._-]")
 
+# Where he might ask for a file to land. Asked for a PDF "on my desktop"
+# the tool had no way to honour it, so the file went to Documents while he
+# was told it was on the Desktop -- true from the tool's point of view and
+# useless from his.
+LOCATIONS = {
+    "desktop": Path.home() / "Desktop",
+    "documents": Path.home() / "Documents",
+    "downloads": Path.home() / "Downloads",
+    "jarvis": OUTPUT_DIR,
+}
+
+
+def _resolve_dir(location: str) -> tuple[Path, str]:
+    """Return the folder to write into, and how to describe it aloud."""
+    key = (location or "").lower().strip()
+    key = key.removeprefix("my ").removeprefix("the ")
+    key = key.replace(" folder", "").strip(" .")
+    if not key:
+        return OUTPUT_DIR, "your Documents, JARVIS folder"
+    if key in LOCATIONS:
+        target = LOCATIONS[key]
+        target.mkdir(parents=True, exist_ok=True)
+        return target, ("your Desktop" if key == "desktop"
+                        else f"your {target.name} folder")
+    candidate = Path(location).expanduser()
+    if candidate.is_dir():
+        return candidate, candidate.name
+    return OUTPUT_DIR, "your Documents, JARVIS folder"
+
 # fpdf's core fonts are Latin-1 only, and a smart quote from the model raises
 # mid-render. Fold the usual suspects rather than lose the document.
 _LATIN1 = {
@@ -32,12 +61,13 @@ _LATIN1 = {
 }
 
 
-def _safe_name(name: str, suffix: str) -> Path:
+def _safe_name(name: str, suffix: str, folder: Path | None = None) -> Path:
     stem = _SAFE.sub("", (name or "").strip()) or f"jarvis_{time.strftime('%Y%m%d_%H%M%S')}"
     if stem.lower().endswith(suffix):
         stem = stem[: -len(suffix)]
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    return OUTPUT_DIR / f"{stem}{suffix}"
+    target = folder or OUTPUT_DIR
+    target.mkdir(parents=True, exist_ok=True)
+    return target / f"{stem}{suffix}"
 
 
 def _latin1(text: str) -> str:
@@ -117,7 +147,7 @@ def bind(memory) -> None:
 
 @tool(category="documents")
 def export_conversation(filename: str = "", turns: int = 40,
-                        as_pdf: bool = True) -> str:
+                        as_pdf: bool = True, location: str = "") -> str:
     """Save the conversation so far to a PDF (or text file) in Documents\\JARVIS.
 
     Use whenever asked to save, export, write up or make a document of what has
@@ -127,6 +157,8 @@ def export_conversation(filename: str = "", turns: int = 40,
         filename: What to call it. Leave empty for a timestamped name.
         turns: How many recent turns to include.
         as_pdf: True for a PDF, False for a plain text file.
+        location: Where to put it -- "desktop", "documents", "downloads",
+            or a full folder path. Pass whatever he asked for.
     """
     if _memory is None:
         return "My conversation store is not available, so I cannot export it."
@@ -145,12 +177,13 @@ def export_conversation(filename: str = "", turns: int = 40,
     ]
     title = "Conversation with JARVIS"
 
+    folder, spoken_where = _resolve_dir(location)
     try:
         if as_pdf:
-            path = _safe_name(filename or "conversation", ".pdf")
+            path = _safe_name(filename or "conversation", ".pdf", folder)
             _write_pdf(path, title, blocks)
         else:
-            path = _safe_name(filename or "conversation", ".txt")
+            path = _safe_name(filename or "conversation", ".txt", folder)
             body = "\n\n".join(f"{who}:\n{text}" for who, text in blocks)
             path.write_text(f"{title}\n{'=' * len(title)}\n\n{body}",
                             encoding="utf-8")
@@ -158,46 +191,55 @@ def export_conversation(filename: str = "", turns: int = 40,
         log.exception("export failed")
         return f"I could not write the file: {e}"
 
-    return (f"Saved {len(blocks)} messages to {path.name} in your Documents, "
-            f"JARVIS folder.")
+    # Confirm from the file that is actually on disk, not from the intent.
+    if not path.exists():
+        return "I tried to write the file but it is not there."
+    return f"Saved {len(blocks)} messages to {path.name} on {spoken_where}."
 
 
 @tool(category="documents")
-def create_pdf(title: str, content: str, filename: str = "") -> str:
+def create_pdf(title: str, content: str, filename: str = "",
+               location: str = "") -> str:
     """Create a PDF document with the given title and body text.
 
     Args:
         title: The heading at the top of the document.
         content: The body text. Blank lines separate paragraphs.
         filename: What to call it. Defaults to the title.
+        location: "desktop", "documents", "downloads", or a folder path.
     """
     paragraphs = [("", p.strip()) for p in content.split("\n\n") if p.strip()]
     if not paragraphs:
         return "There was no content to put in the document."
+    folder, spoken_where = _resolve_dir(location)
     try:
-        path = _safe_name(filename or title, ".pdf")
+        path = _safe_name(filename or title, ".pdf", folder)
         _write_pdf(path, title, paragraphs)
     except Exception as e:
         log.exception("pdf creation failed")
         return f"I could not create the PDF: {e}"
-    return f"Created {path.name} in your Documents, JARVIS folder."
+    if not path.exists():
+        return "I tried to create the PDF but it is not there."
+    return f"Created {path.name} on {spoken_where}."
 
 
 @tool(category="documents")
-def save_text_file(filename: str, content: str) -> str:
+def save_text_file(filename: str, content: str, location: str = "") -> str:
     """Save text to a file in Documents\\JARVIS.
 
     Args:
         filename: Name for the file, including its extension.
         content: What to write into it.
+        location: "desktop", "documents", "downloads", or a folder path.
     """
     suffix = Path(filename).suffix or ".txt"
+    folder, spoken_where = _resolve_dir(location)
     try:
-        path = _safe_name(Path(filename).stem, suffix)
+        path = _safe_name(Path(filename).stem, suffix, folder)
         path.write_text(content, encoding="utf-8")
     except Exception as e:
         return f"I could not save that file: {e}"
-    return f"Saved {path.name} in your Documents, JARVIS folder."
+    return f"Saved {path.name} on {spoken_where}."
 
 
 @tool(category="documents")

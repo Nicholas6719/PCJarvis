@@ -67,6 +67,7 @@ class Listener:
         self._force_capture = asyncio.Event()
         self._muted = False
         self._conversation_until = 0.0
+        self._suspended = False
         self._speaking = False
         self._utterances: asyncio.Queue[str] = asyncio.Queue()
 
@@ -111,12 +112,26 @@ class Listener:
     def end_conversation(self) -> None:
         """Drop straight back to wake mode -- 'that's all', or a timeout."""
         self._conversation_until = 0.0
+        self._suspended = False
         self.mode = Mode.WAKE
         self._reset_audio()
 
+    def suspend_conversation(self) -> None:
+        """Freeze the window for the duration of a turn.
+
+        A reply that takes longer than the window used to expire it while he was
+        still thinking, dropping to wake mode mid-answer -- so the follow-up he
+        was about to ask needed the wake word again.
+        """
+        self._suspended = True
+
+    def resume_conversation(self) -> None:
+        self._suspended = False
+        self.extend_conversation()
+
     @property
     def in_conversation(self) -> bool:
-        return time.monotonic() < self._conversation_until
+        return self._suspended or time.monotonic() < self._conversation_until
 
     def _reset_audio(self) -> None:
         self.mic.drain()
