@@ -254,13 +254,18 @@ def open_folder(name: str) -> str:
     """
     from pathlib import Path
 
+    from ..folders import save_folder
+
+    # Resolved through the shell, not guessed. "Desktop" here has to be the one
+    # that actually appears on screen -- opening the unredirected folder shows
+    # him an empty directory and looks like a bug.
     known = {
-        "downloads": Path.home() / "Downloads",
-        "documents": Path.home() / "Documents",
-        "desktop": Path.home() / "Desktop",
-        "pictures": Path.home() / "Pictures",
-        "music": Path.home() / "Music",
-        "videos": Path.home() / "Videos",
+        "downloads": save_folder("downloads"),
+        "documents": save_folder("documents"),
+        "desktop": save_folder("desktop"),
+        "pictures": save_folder("pictures"),
+        "music": save_folder("music"),
+        "videos": save_folder("videos"),
         "home": Path.home(),
         "jarvis": Path.home() / "Documents" / "JARVIS",
         "screenshots": Path.home() / "Pictures" / "JARVIS",

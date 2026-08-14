@@ -263,8 +263,9 @@ def take_screenshot(location: str = "") -> str:
 
         from .documents import _resolve_dir
 
+        problem = ""
         if location.strip():
-            folder, spoken_where = _resolve_dir(location)
+            folder, spoken_where, problem = _resolve_dir(location)
         else:
             folder = Path.home() / "Pictures" / "JARVIS"
             spoken_where = "your Pictures, JARVIS folder"
@@ -279,6 +280,8 @@ def take_screenshot(location: str = "") -> str:
         if not path.exists():
             return "I took the screenshot but could not save it."
         size = path.stat().st_size
+        if problem:
+            return f"{problem}. It is saved as {path.name}."
         return (f"Screenshot saved as {path.name} on {spoken_where} "
                 f"({size/1024:.0f} KB).")
     except Exception as e:

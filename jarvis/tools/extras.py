@@ -20,7 +20,7 @@ from .system import _volume_interface
 
 log = logging.getLogger("jarvis.tools.extras")
 
-NOTES_FILE = Path.home() / "Documents" / "JARVIS" / "notes.md"
+NOTES_FILE = Path.home() / "Documents" / "JARVIS" / "notes.md"  # local, not OneDrive
 
 
 # ══════════════════════════════════════════════════════════════════

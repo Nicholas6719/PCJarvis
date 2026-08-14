@@ -223,8 +223,18 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?lock\s+(?:the\s+|my\s+)?"
            r"(?:screen|computer|pc|laptop|workstation)\s*[.!]?$",
            "lock_screen", reply="Locking now."),
-    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?take\s+a\s+screenshot\s*[.!]?$",
-           "take_screenshot"),
+    # Destination taken from the sentence, not from the model. Asked to save
+    # a screenshot to the Desktop, the model simply never passed a location
+    # and then announced the Desktop anyway.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:take|grab|get)\s+a\s+screenshot\s+(?:and\s+)?(?:save\s+it\s+)?(?:to|on|in)\s+(?:my\s+|the\s+)?(?P<where>desktop|documents|downloads|pictures)(?:\s+folder)?\s*[.!]?$",
+           "take_screenshot",
+           lambda m: {"location": m.group("where")}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:take|grab|get)\s+a\s+screenshot\s*[.!]?$", "take_screenshot"),
+
+    # Same for exporting the conversation.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:save|export|make|create)\s+(?:a\s+)?(?:pdf\s+)?(?:of\s+)?(?:our\s+|the\s+|this\s+)?conversation\s*(?:as\s+a\s+pdf\s*)?(?:and\s+)?(?:save\s+it\s+)?(?:to|on|in)\s+(?:my\s+|the\s+)?(?P<where>desktop|documents|downloads)(?:\s+folder)?\s*[.!]?$",
+           "export_conversation",
+           lambda m: {"location": m.group("where")}),
 
     # ══ memory ══
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?remember(?:\s+that)?\s+"

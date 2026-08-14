@@ -20,37 +20,60 @@ from .registry import tool
 
 log = logging.getLogger("jarvis.tools.documents")
 
+from ..folders import save_folder
+
+# Local, not OneDrive -- his existing exports already live here.
 OUTPUT_DIR = Path.home() / "Documents" / "JARVIS"
 _SAFE = re.compile(r"[^A-Za-z0-9 ._-]")
 
-# Where he might ask for a file to land. Asked for a PDF "on my desktop"
-# the tool had no way to honour it, so the file went to Documents while he
-# was told it was on the Desktop -- true from the tool's point of view and
-# useless from his.
-LOCATIONS = {
-    "desktop": Path.home() / "Desktop",
-    "documents": Path.home() / "Documents",
-    "downloads": Path.home() / "Downloads",
-    "jarvis": OUTPUT_DIR,
-}
+# Places he names out loud. Resolved through folders.save_folder, which knows
+# that "Desktop" means whatever Windows has registered -- on this machine the
+# OneDrive one. Writing to the plain C:\Users\<user>\Desktop succeeds, reports
+# success, and leaves the file somewhere that never appears on screen.
+_NAMES = {"desktop", "documents", "downloads", "pictures", "music", "videos"}
 
 
-def _resolve_dir(location: str) -> tuple[Path, str]:
-    """Return the folder to write into, and how to describe it aloud."""
+def _resolve_dir(location: str) -> tuple[Path, str, str]:
+    """Where to write, how to say it, and what went wrong.
+
+    Returns (folder, spoken_where, problem). `problem` is empty when the
+    request was honoured; otherwise it explains what could not be done, so the
+    tool says so rather than quietly saving somewhere else and claiming
+    success.
+    """
     key = (location or "").lower().strip()
     key = key.removeprefix("my ").removeprefix("the ")
     key = key.replace(" folder", "").strip(" .")
-    if not key:
-        return OUTPUT_DIR, "your Documents, JARVIS folder"
-    if key in LOCATIONS:
-        target = LOCATIONS[key]
-        target.mkdir(parents=True, exist_ok=True)
-        return target, ("your Desktop" if key == "desktop"
-                        else f"your {target.name} folder")
+
+    if not key or key == "jarvis":
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        return OUTPUT_DIR, "your Documents, JARVIS folder", ""
+
+    if key in _NAMES:
+        target = save_folder(key)
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            probe = target / ".jarvis_write_test"
+            probe.write_text("", encoding="utf-8")
+            probe.unlink(missing_ok=True)
+        except Exception as e:
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+            return (OUTPUT_DIR, "your Documents, JARVIS folder",
+                    f"I could not write to your {key.capitalize()} ({e}), so I "
+                    f"put it in your Documents, JARVIS folder instead")
+        spoken = ("your Desktop" if key == "desktop"
+                  else f"your {target.name} folder")
+        return target, spoken, ""
+
     candidate = Path(location).expanduser()
     if candidate.is_dir():
-        return candidate, candidate.name
-    return OUTPUT_DIR, "your Documents, JARVIS folder"
+        return candidate, str(candidate), ""
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    return (OUTPUT_DIR, "your Documents, JARVIS folder",
+            f"I do not know where '{location}' is, so I put it in your "
+            f"Documents, JARVIS folder instead")
+
 
 # fpdf's core fonts are Latin-1 only, and a smart quote from the model raises
 # mid-render. Fold the usual suspects rather than lose the document.
@@ -181,7 +204,7 @@ def export_conversation(filename: str = "", turns: int = 40,
     ]
     title = "Conversation with JARVIS"
 
-    folder, spoken_where = _resolve_dir(location)
+    folder, spoken_where, problem = _resolve_dir(location)
     try:
         if as_pdf:
             path = _safe_name(filename or "conversation", ".pdf", folder)
@@ -198,6 +221,8 @@ def export_conversation(filename: str = "", turns: int = 40,
     # Confirm from the file that is actually on disk, not from the intent.
     if not path.exists():
         return "I tried to write the file but it is not there."
+    if problem:
+        return f"{problem}. It is saved as {path.name}."
     return f"Saved {len(blocks)} messages to {path.name} on {spoken_where}."
 
 
@@ -217,7 +242,7 @@ def create_pdf(title: str, content: str, filename: str = "",
     paragraphs = [("", p.strip()) for p in content.split("\n\n") if p.strip()]
     if not paragraphs:
         return "There was no content to put in the document."
-    folder, spoken_where = _resolve_dir(location)
+    folder, spoken_where, problem = _resolve_dir(location)
     try:
         path = _safe_name(filename or title, ".pdf", folder)
         _write_pdf(path, title, paragraphs)
@@ -226,6 +251,8 @@ def create_pdf(title: str, content: str, filename: str = "",
         return f"I could not create the PDF: {e}"
     if not path.exists():
         return "I tried to create the PDF but it is not there."
+    if problem:
+        return f"{problem}. It is saved as {path.name}."
     return f"Created {path.name} on {spoken_where}."
 
 
@@ -239,12 +266,14 @@ def save_text_file(filename: str, content: str, location: str = "") -> str:
         location: "desktop", "documents", "downloads", or a folder path.
     """
     suffix = Path(filename).suffix or ".txt"
-    folder, spoken_where = _resolve_dir(location)
+    folder, spoken_where, problem = _resolve_dir(location)
     try:
         path = _safe_name(Path(filename).stem, suffix, folder)
         path.write_text(content, encoding="utf-8")
     except Exception as e:
         return f"I could not save that file: {e}"
+    if problem:
+        return f"{problem}. It is saved as {path.name}."
     return f"Saved {path.name} on {spoken_where}."
 
 
