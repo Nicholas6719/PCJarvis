@@ -195,11 +195,29 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:get|give me)?\s*directions\s+"
            r"to\s+(?P<dest>.+?)\s*[.!?]?$",
            "get_directions", lambda m: {"destination": m.group("dest").strip()}),
-    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:open|go to|pull up|take me to)"
+    Intent(r"^(?:jarvis[,\s]+)?(?:can\s+you\s+|could\s+you\s+)?(?:please\s+)?"
+           r"(?:open(?:\s+up)?|go\s+to|pull\s+up|take\s+me\s+to|bring\s+up|launch|show\s+me)"
            r"\s+(?P<site>youtube|github|gmail|google|reddit|twitter|amazon|"
            r"netflix|spotify\.com|wikipedia|linkedin|discord|twitch|ebay|espn|"
-           r"chatgpt|claude|notion|figma|outlook)\s*[.!]?$",
+           r"chatgpt|claude|notion|figma|outlook)(?:\s+for\s+me)?\s*[.!?]?$",
            "open_website", lambda m: {"site": m.group("site")}),
+
+    # ══ the machine itself ══ destructive, and confirmed before running
+    # Deterministic on purpose. Left to the model, "shut down my computer"
+    # produced a confident "shutting down" with no tool call, no confirmation
+    # and no shutdown. Matching here routes it straight to the confirmation
+    # gate in brain/llm.py.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:shut\s*down|turn\s+off|"
+           r"power\s+(?:down|off))\s+(?:my\s+|the\s+)?"
+           r"(?:computer|pc|laptop|machine|system)\s*[.!]?$",
+           "shutdown_computer", lambda m: {"restart": False}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:restart|reboot)\s+"
+           r"(?:my\s+|the\s+)?(?:computer|pc|laptop|machine|system)"
+           r"\s*[.!]?$",
+           "shutdown_computer", lambda m: {"restart": True}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:put\s+)?(?:my\s+|the\s+)?"
+           r"(?:computer|pc|laptop|machine)\s+(?:to\s+sleep|asleep)"
+           r"\s*[.!]?$", "sleep_computer"),
 
     # ══ machine ══
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?lock\s+(?:the\s+|my\s+)?"

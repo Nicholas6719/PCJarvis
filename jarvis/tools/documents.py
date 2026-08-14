@@ -148,17 +148,21 @@ def bind(memory) -> None:
 @tool(category="documents")
 def export_conversation(filename: str = "", turns: int = 40,
                         as_pdf: bool = True, location: str = "") -> str:
-    """Save the conversation so far to a PDF (or text file) in Documents\\JARVIS.
+    """Save the conversation so far to a PDF or text file, anywhere he asks.
 
     Use whenever asked to save, export, write up or make a document of what has
     been discussed.
+
+    IF HE NAMES A PLACE -- desktop, downloads, a folder -- YOU MUST PASS IT AS
+    `location`. The description used to say the file goes to Documents, so the
+    model never passed a location and then announced the Desktop anyway.
 
     Args:
         filename: What to call it. Leave empty for a timestamped name.
         turns: How many recent turns to include.
         as_pdf: True for a PDF, False for a plain text file.
-        location: Where to put it -- "desktop", "documents", "downloads",
-            or a full folder path. Pass whatever he asked for.
+        location: Where he asked for it: "desktop", "downloads", "documents",
+            or a full folder path. Leave empty only if he named nowhere.
     """
     if _memory is None:
         return "My conversation store is not available, so I cannot export it."
@@ -201,6 +205,8 @@ def export_conversation(filename: str = "", turns: int = 40,
 def create_pdf(title: str, content: str, filename: str = "",
                location: str = "") -> str:
     """Create a PDF document with the given title and body text.
+
+    If he names a place to put it, pass it as `location`.
 
     Args:
         title: The heading at the top of the document.

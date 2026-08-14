@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 import time
 import urllib.parse
 import webbrowser
@@ -46,32 +47,98 @@ _LEAD = re.compile(
 _TRAIL = re.compile(r"\s+(?:for\s+me|please|website|site|page|dot\s*com)$", re.I)
 
 
-def _foreground() -> None:
-    """Bring whatever just opened to the front.
+def _force_foreground(hwnd) -> bool:
+    """Actually bring a window to the front.
 
-    Windows gives focus to whichever process it feels like, so a window opened
-    on request routinely appears behind everything. If he asked for something to
-    be opened, he wants to see it.
+    Windows refuses SetForegroundWindow to a process that does not own the
+    active window -- which is exactly our situation, since JARVIS is the active
+    window when he is asked to open something. The accepted way round it is to
+    attach to the foreground thread's input queue for the duration of the call.
+    Without this the browser opens behind everything, which is what happened.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    SW_RESTORE = 9
+
+    try:
+        if user32.IsIconic(hwnd):
+            user32.ShowWindow(hwnd, SW_RESTORE)
+
+        target_thread = user32.GetWindowThreadProcessId(hwnd, None)
+        current_thread = kernel32.GetCurrentThreadId()
+        foreground = user32.GetForegroundWindow()
+        fg_thread = user32.GetWindowThreadProcessId(foreground, None)
+
+        attached = []
+        for thread in {target_thread, fg_thread}:
+            if thread and thread != current_thread:
+                if user32.AttachThreadInput(current_thread,
+                                            wintypes.DWORD(thread), True):
+                    attached.append(thread)
+        try:
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+            user32.SetActiveWindow(hwnd)
+        finally:
+            for thread in attached:
+                user32.AttachThreadInput(current_thread,
+                                         wintypes.DWORD(thread), False)
+        return bool(user32.GetForegroundWindow() == hwnd)
+    except Exception:
+        log.debug("could not force the window forward", exc_info=True)
+        return False
+
+
+def _foreground(timeout: float = 6.0) -> bool:
+    """Wait for a new window to appear and put it in front.
+
+    Also asks JARVIS to step aside. If he is asked to open something, he should
+    get out of the way -- there is no point opening YouTube behind a
+    full-screen assistant.
     """
     try:
         import pygetwindow as gw
 
-        before = set(gw.getAllTitles())
-        for _ in range(24):                     # up to ~3s for it to appear
-            time.sleep(0.125)
-            fresh = [t for t in gw.getAllTitles() if t.strip() and t not in before]
-            if not fresh:
-                continue
-            for window in gw.getWindowsWithTitle(fresh[-1]):
-                if window.isMinimized:
-                    window.restore()
-                window.activate()
-                return
+        from ..bus import BUS
     except Exception:
-        log.debug("could not foreground the new window", exc_info=True)
+        return False
+
+    try:
+        before = {w._hWnd for w in gw.getAllWindows() if w.title.strip()}
+    except Exception:
+        before = set()
+
+    # Step aside first, so the new window has somewhere to land.
+    try:
+        BUS.emit_threadsafe("window.minimize")
+    except Exception:
+        pass
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        time.sleep(0.2)
+        try:
+            fresh = [w for w in gw.getAllWindows()
+                     if w.title.strip() and w._hWnd not in before]
+        except Exception:
+            continue
+        if fresh:
+            time.sleep(0.4)          # let it finish drawing
+            return _force_foreground(fresh[-1]._hWnd)
+    return False
 
 
 def _open(url: str, foreground: bool = True) -> bool:
+    """Launch, and bring forward WITHOUT making him wait for it.
+
+    Waiting for the browser window to appear took six seconds, all of it
+    silence before he said "opened YouTube". The launch either works or it
+    does not -- the arranging of windows afterwards is not something the
+    reply should be held up for.
+    """
     try:
         webbrowser.open(url)
     except Exception:
@@ -81,7 +148,7 @@ def _open(url: str, foreground: bool = True) -> bool:
             log.exception("could not open %s", url)
             return False
     if foreground:
-        _foreground()
+        threading.Thread(target=_foreground, daemon=True).start()
     return True
 
 
@@ -204,7 +271,7 @@ def open_folder(name: str) -> str:
         return f"I can't find a folder called {name}."
     try:
         os.startfile(str(target))
-        _foreground()
+        threading.Thread(target=_foreground, daemon=True).start()
         return f"Opened {target.name or str(target)}."
     except Exception as e:
         return f"I couldn't open that folder: {e}"

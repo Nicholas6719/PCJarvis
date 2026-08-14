@@ -66,6 +66,7 @@ EXTRAS: dict[str, set[str]] = {
                             "terminal command", "script"},
 
     # ── documents ──
+    "take_screenshot":     {"desktop", "downloads", "save it to"},
     "export_conversation": {"pdf", "export", "transcript", "write up",
                             "save our conversation", "save this conversation",
                             "document of our", "our conversation"},

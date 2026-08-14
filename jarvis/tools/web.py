@@ -29,6 +29,46 @@ _STOP = {"the", "a", "an", "of", "for", "and", "in", "on", "to", "is",
          "what", "how", "why", "latest", "news", "about", "any"}
 
 
+def precise_location() -> tuple[float, float, str] | None:
+    """Where he actually is, from the Windows location service.
+
+    Measured on this machine: the Windows service is accurate to about 76
+    metres, while the IP estimate landed in Cambridge -- 27.9 km away, which is
+    a different city's weather entirely. IP geolocation reports where the
+    *network* is, not where the laptop is.
+
+    Returns (lat, lon, source) or None if location services are off.
+    """
+    try:
+        import asyncio
+        import concurrent.futures
+
+        def read():
+            from winsdk.windows.devices.geolocation import (
+                Geolocator, PositionAccuracy)
+
+            async def go():
+                locator = Geolocator()
+                locator.desired_accuracy = PositionAccuracy.HIGH
+                position = await locator.get_geoposition_async()
+                point = position.coordinate.point.position
+                return (float(point.latitude), float(point.longitude),
+                        float(position.coordinate.accuracy or 0))
+            return asyncio.run(go())
+
+        # WinRT is apartment-bound; give it its own thread every time.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            lat, lon, accuracy = pool.submit(read).result(timeout=12)
+        log.info("using the Windows location service (accurate to ~%.0f m)",
+                 accuracy)
+        return lat, lon, "device"
+    except Exception as e:
+        log.info("Windows location unavailable (%s); falling back to the IP "
+                 "estimate, which can be tens of kilometres out",
+                 type(e).__name__)
+        return None
+
+
 def _looks_like_consent(text: str) -> bool:
     head = text[:900].lower()
     return sum(1 for phrase in _CONSENT if phrase in head) >= 2
@@ -177,9 +217,31 @@ def get_weather(location: str = "") -> str:
                 lat, lon = place["latitude"], place["longitude"]
                 name = place["name"]
             else:
-                loc = client.get("http://ip-api.com/json/").json()
-                lat, lon = loc["lat"], loc["lon"]
-                name = loc.get("city", "your location")
+                # Device location first. The IP estimate is where the
+                # network is, not where the laptop is -- measured 27.9 km
+                # out on this machine, which is a different city.
+                fix = precise_location()
+                if fix:
+                    lat, lon, _ = fix
+                    # Name the place from the coordinates, so he can tell at
+                    # a glance whether it picked the right town.
+                    name = "your location"
+                    try:
+                        rev = client.get(
+                            "https://nominatim.openstreetmap.org/reverse",
+                            params={"lat": lat, "lon": lon, "format": "json",
+                                    "zoom": 12},
+                            headers={"User-Agent": UA}).json()
+                        addr = rev.get("address", {})
+                        name = (addr.get("city") or addr.get("town")
+                                or addr.get("village") or addr.get("suburb")
+                                or addr.get("county") or "your location")
+                    except Exception:
+                        log.debug("reverse geocode failed", exc_info=True)
+                else:
+                    loc = client.get("http://ip-api.com/json/").json()
+                    lat, lon = loc["lat"], loc["lon"]
+                    name = loc.get("city", "your location")
 
             w = client.get(
                 "https://api.open-meteo.com/v1/forecast",

@@ -111,13 +111,42 @@ class UIChannel:
             if self.minimized:
                 window.restore()
                 self.minimized = False
-            if self.want_fullscreen and not self.fullscreen_active:
-                window.toggle_fullscreen()
-                self.fullscreen_active = True
-            log.info("restored to the foreground")
+                time.sleep(0.35)          # let Windows finish restoring
+
+            # Ask the PAGE whether it is actually full screen rather than
+            # trusting a flag. Windows may restore a minimised window to its
+            # previous full-screen state or to a plain one, and toggling blind
+            # got it wrong half the time -- which is why waking him came back
+            # windowed.
+            if self.want_fullscreen:
+                for _ in range(3):
+                    if self._is_really_fullscreen(window):
+                        self.fullscreen_active = True
+                        break
+                    window.toggle_fullscreen()
+                    time.sleep(0.35)
+                else:
+                    log.warning("could not force full screen on restore")
+            log.info("restored (full screen: %s)", self.fullscreen_active)
+
         elif op == "toggle_fullscreen":
             window.toggle_fullscreen()
             self.fullscreen_active = not self.fullscreen_active
+
+    def _is_really_fullscreen(self, window) -> bool:
+        """Measure it, do not assume it.
+
+        The page knows its own viewport, so comparing that against the screen
+        is the one check that cannot drift out of sync with reality.
+        """
+        try:
+            result = window.evaluate_js(
+                "(window.innerHeight >= screen.height - 4 && "
+                " window.innerWidth  >= screen.width  - 4)")
+            return bool(result)
+        except Exception:
+            log.debug("could not measure the window", exc_info=True)
+            return False
 
     def _flush(self) -> None:
         window = self._window()

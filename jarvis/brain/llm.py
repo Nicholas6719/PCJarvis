@@ -288,8 +288,23 @@ class Brain:
         if shortcut:
             name, args, canned = shortcut
             spec = registry.get(name)
-            if spec and not (spec.destructive
-                             and self.cfg.get("tools.confirm_destructive", True)):
+
+            # A destructive command matched deterministically still has to be
+            # confirmed -- but it must be *asked about*, not handed to the model.
+            # Left to the model, "shut down my computer" produced a confident
+            # "shutting down" with no tool call, no confirmation, and no
+            # shutdown: the worst of all three outcomes.
+            if (spec and spec.destructive
+                    and self.cfg.get("tools.confirm_destructive", True)):
+                self._pending_confirm = (name, args)
+                self.history.append({"role": "user", "content": user_text})
+                question = persona.pick(persona.CONFIRM_PHRASES, self.cfg)
+                log.info("destructive intent %s -- awaiting confirmation", name)
+                yield Event("confirm", text=question, name=name,
+                            data={"arguments": args})
+                return
+
+            if spec:
                 yield Event("tool_start", name=name, data={"arguments": args})
                 result = await registry.execute(name, args)
                 yield Event("tool_end", name=name, text=result)

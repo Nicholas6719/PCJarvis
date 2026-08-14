@@ -251,15 +251,36 @@ def set_brightness(level: int) -> str:
 
 
 @tool(category="system")
-def take_screenshot() -> str:
-    """Capture the screen and save it to the Pictures folder."""
+def take_screenshot(location: str = "") -> str:
+    """Capture the screen and save it.
+
+    Args:
+        location: Where to put it -- "desktop", "documents", "downloads", or a
+            folder path. Pass whatever he asked for. Defaults to Pictures.
+    """
     try:
         import pyautogui
-        folder = Path.home() / "Pictures" / "JARVIS"
+
+        from .documents import _resolve_dir
+
+        if location.strip():
+            folder, spoken_where = _resolve_dir(location)
+        else:
+            folder = Path.home() / "Pictures" / "JARVIS"
+            spoken_where = "your Pictures, JARVIS folder"
         folder.mkdir(parents=True, exist_ok=True)
+
         path = folder / f"screen_{time.strftime('%Y%m%d_%H%M%S')}.png"
         pyautogui.screenshot().save(path)
-        return f"Screenshot saved as {path.name} in your Pictures, JARVIS folder."
+
+        # Confirm from the file on disk. Asked to save one to the Desktop, an
+        # earlier version put it in Pictures and let the model announce the
+        # Desktop -- true from the tool's point of view, useless from his.
+        if not path.exists():
+            return "I took the screenshot but could not save it."
+        size = path.stat().st_size
+        return (f"Screenshot saved as {path.name} on {spoken_where} "
+                f"({size/1024:.0f} KB).")
     except Exception as e:
         return f"Screenshot failed: {e}"
 
