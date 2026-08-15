@@ -130,10 +130,23 @@ async def build_app(fast_voice: bool = True):
     if fast_voice:
         jmain.Voice = FastVoice
 
+    # Start Ollama the way the app does. This suite ends by calling
+    # app.shutdown(), which now stops Ollama on purpose -- he asked for
+    # the model to be released when JARVIS closes -- so a second run in
+    # the same session used to fail at boot with the dependency the first
+    # run had correctly torn down.
+    import os
+
+    from jarvis.app import start_ollama
+
+    os.environ.setdefault("OLLAMA_IGPU_ENABLE", "1")
+    if not start_ollama():
+        raise RuntimeError("could not start Ollama")
+
     app = jmain.Jarvis(CONFIG)
     ok = await app.boot()
     if not ok:
-        raise RuntimeError("boot failed -- is Ollama running?")
+        raise RuntimeError("boot failed even with Ollama running")
 
     # The proactive path is wired inside run(); this suite never calls run(),
     # so wire the same handlers here. Getting this wrong is exactly how the
@@ -333,7 +346,20 @@ async def test_documents(app, rec) -> None:
     print("\n[documents] the file must exist where he asked")
     from jarvis.tools.documents import OUTPUT_DIR
 
-    desktop = Path.home() / "Desktop"
+    # Where Windows itself says the Desktop is, read straight from the
+    # registry. Deliberately NOT jarvis.folders: a test that resolves the
+    # path with the same helper the code uses would pass no matter what
+    # that helper returned. This assertion used to be Path.home() /
+    # "Desktop", which is a folder that exists, accepts writes, and never
+    # appears on screen -- so the test passed while every file vanished.
+    import winreg
+
+    _key = "\\".join(["Software", "Microsoft", "Windows",
+                                   "CurrentVersion", "Explorer",
+                                   "Shell Folders"])
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _key) as _k:
+        desktop = Path(winreg.QueryValueEx(_k, "Desktop")[0])
+
     for stale in list(desktop.glob("e2e_*.pdf")) + list(OUTPUT_DIR.glob("e2e_*.pdf")):
         stale.unlink(missing_ok=True)
 
@@ -341,7 +367,8 @@ async def test_documents(app, rec) -> None:
     r = await registry.execute("export_conversation",
                                {"filename": "e2e_desktop", "location": "desktop"})
     made = desktop / "e2e_desktop.pdf"
-    check("PDF lands on the Desktop when asked", made.exists(), r[:70])
+    check("PDF lands on the visible Desktop when asked", made.exists(),
+          f"{r[:60]} | expected in {desktop}")
     if made.exists():
         check("and it is a real PDF", made.read_bytes()[:5] == b"%PDF-")
         made.unlink(missing_ok=True)

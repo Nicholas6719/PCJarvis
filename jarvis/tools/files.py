@@ -26,8 +26,38 @@ SKIP_DIRS = {"node_modules", ".git", "__pycache__", ".venv", "venv",
 
 
 def _roots() -> list[Path]:
-    roots = [Path(p) for p in CONFIG.get("tools.file_search_roots", [])]
-    return [r for r in roots if r.exists()]
+    r"""Where to search.
+
+    A config entry may be a bare folder name -- "desktop", "documents" -- or a
+    full path. A name expands to *both* the folder Windows has registered and
+    the plain C:\Users\<user>\<Name> one, because OneDrive redirects some
+    folders and not others. On this machine both exist for Desktop, Documents
+    and Pictures, and they hold different files.
+
+    That pairing is not tidiness. JARVIS writes to the local Documents by
+    preference and to the redirected Desktop by necessity, so searching only
+    one of each pair would fail to find files JARVIS had just created itself --
+    which is exactly how a screenshot "saved to the Desktop" went missing.
+    """
+    from ..folders import KNOWN_FOLDER_IDS, known_folder, local_folder
+
+    out: list[Path] = []
+    seen: set[str] = set()
+
+    def add(path: Path) -> None:
+        key = str(path).lower()
+        if key not in seen and path.exists():
+            seen.add(key)
+            out.append(path)
+
+    for entry in CONFIG.get("tools.file_search_roots", []):
+        name = str(entry).strip()
+        if name.lower() in KNOWN_FOLDER_IDS:
+            add(known_folder(name.lower()))
+            add(local_folder(name.lower()))
+        else:
+            add(Path(name).expanduser())
+    return out
 
 
 @tool(category="files")

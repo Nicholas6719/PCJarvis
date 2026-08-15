@@ -51,7 +51,6 @@ stt:
 llm:
   host: http://127.0.0.1:11434
   model: qwen2.5:7b-instruct     # primary — strong native tool calling
-  fast_model: llama3.2:3b        # unused by default; swap in for snappier chat
   temperature: 0.6
   num_predict: 120               # spoken replies are short; caps runaway generation
   num_ctx: 4096                  # our prompt is ~1500 tok; smaller = less KV, faster
@@ -63,7 +62,10 @@ llm:
   max_tool_iterations: 6         # safety rail on the tool loop
   history_turns: 12              # conversational memory held in context
   fast_path_words: 8             # short, keyword-free chit-chat skips the tools
-  max_tools: 10                  # tool schemas sent per turn (see tools/router.py)
+  # Tool schemas per turn are NOT capped here. tools/router.py sends a
+  # fixed core of 23 plus any extras the wording asks for; a numeric cap
+  # sat here unread for a while, and applying it would have truncated
+  # the core set and silently removed most of what JARVIS can do.
 
 # ── The voice ─────────────────────────────────────────────────────
 # Kokoro gives a clean British read; the chain below is what makes it
@@ -121,10 +123,11 @@ tools:
   confirm_destructive: true # shutdown / shell / delete need a spoken yes
   shell_enabled: true
   web_result_count: 5
-  file_search_roots:
-    - C:/Users/nicho/Documents
-    - C:/Users/nicho/Desktop
-    - C:/Users/nicho/Downloads
+  file_search_roots:      # names, not paths -- resolved through folders.py so
+    - documents           # OneDrive redirection is honoured and BOTH the
+    - desktop             # redirected and local copies of each are searched
+    - downloads
+    - pictures            # screenshots land here by default
 
 ui:
   width: 1100
@@ -133,7 +136,6 @@ ui:
   fullscreen: true          # ALWAYS launches full screen. F11 toggles.
   minimize_on_sleep: true   # "that's all" minimises; the wake word restores
   always_on_top: false
-  start_minimized: false
   hotkey: ctrl+alt+j        # trigger without the wake word
 
 system:

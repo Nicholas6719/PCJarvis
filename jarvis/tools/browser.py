@@ -280,3 +280,124 @@ def open_folder(name: str) -> str:
         return f"Opened {target.name or str(target)}."
     except Exception as e:
         return f"I couldn't open that folder: {e}"
+
+
+# ══════════════════════════════════════════════════════════════════
+#  What is on screen
+# ══════════════════════════════════════════════════════════════════
+# Read from the window title, which is the only thing available without
+# automating the browser itself. It is enough for "what page am I on", and it
+# costs nothing -- no extension, no debugging port, no second process.
+BROWSERS = ("google chrome", "mozilla firefox", "microsoft edge", "brave",
+            "opera", "vivaldi", "chromium")
+
+# Chrome and Edge join with a hyphen, Firefox with an em dash. Edge also puts
+# a zero-width space inside its own name, which is why matching is done on a
+# normalised copy rather than the raw title.
+_SEPARATORS = (" - ", " — ", " – ")
+
+
+def _normalise(title: str) -> str:
+    return "".join(c for c in title if c.isprintable() and ord(c) < 0x2000).lower()
+
+
+def _split_browser_title(title: str) -> tuple[str, str] | None:
+    """(page, browser) if this looks like a browser window, else None."""
+    flat = _normalise(title)
+    browser = next((b for b in BROWSERS if flat.endswith(b)), None)
+    if browser is None:
+        return None
+    cut = max((title.rfind(s) for s in _SEPARATORS), default=-1)
+    page = title[:cut].strip() if cut > 0 else ""
+    # Edge appends "and 4 more pages" and a profile name; drop the noise.
+    for noise in (" and ", " - Personal", " - Work"):
+        if noise in page:
+            page = page.split(noise)[0].strip()
+    return (page or "a blank tab"), browser.title()
+
+
+@tool(category="browser")
+def current_page() -> str:
+    """Say what web page is currently open.
+
+    Use for "what page am I on", "what am I looking at", "what site is this".
+    """
+    try:
+        import pygetwindow as gw
+
+        active = gw.getActiveWindow()
+        if active is not None and active.title.strip():
+            found = _split_browser_title(active.title)
+            if found:
+                page, browser = found
+                return f"You are on {page}, in {browser}."
+
+        # Not focused on a browser. Rather than say nothing useful, look for a
+        # browser window anywhere and be explicit that it is not the front one.
+        for w in gw.getAllWindows():
+            if not w.title.strip():
+                continue
+            found = _split_browser_title(w.title)
+            if found:
+                page, browser = found
+                return (f"Your browser is not in front at the moment. The page "
+                        f"open in {browser} is {page}.")
+
+        front = active.title.strip() if active is not None else ""
+        if front:
+            return f"No browser open. You are in {front}."
+        return "I cannot see a browser window open."
+    except Exception as e:
+        return f"Could not tell what is on screen: {e}"
+
+
+@tool(category="browser")
+def open_new_tab() -> str:
+    """Open a new, empty tab in the browser that is already open."""
+    try:
+        import pyautogui
+        import pygetwindow as gw
+
+        target = None
+        for w in gw.getAllWindows():
+            if w.title.strip() and _split_browser_title(w.title):
+                target = w
+                break
+        if target is None:
+            return "No browser is open, so there is nothing to add a tab to."
+        try:
+            target.activate()
+        except Exception:
+            pass
+        pyautogui.hotkey("ctrl", "t")
+        return "New tab open."
+    except Exception as e:
+        return f"Could not open a tab: {e}"
+
+
+@tool(category="browser")
+def close_tab() -> str:
+    """Close the browser tab that is currently in front.
+
+    Only ever closes the focused browser tab, never the window and never
+    another application -- and it says how to undo it, because a tab closed by
+    mistake is a form half filled in and lost.
+    """
+    try:
+        import pyautogui
+        import pygetwindow as gw
+
+        active = gw.getActiveWindow()
+        if active is None or not active.title.strip():
+            return "I cannot tell which window is in front, so I have left it alone."
+        found = _split_browser_title(active.title)
+        if not found:
+            # Refusing here matters: ctrl+w in the wrong application closes a
+            # document, not a tab.
+            return (f"The window in front is {active.title.strip()}, which is "
+                    f"not a browser, so I have not closed anything.")
+        page, browser = found
+        pyautogui.hotkey("ctrl", "w")
+        return f"Closed {page}. Control shift T brings it back."
+    except Exception as e:
+        return f"Could not close the tab: {e}"

@@ -12,10 +12,8 @@ shared mutable.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
-import time
 from pathlib import Path
 
 import webview
@@ -210,6 +208,52 @@ class Bridge:
             except Exception:
                 failures += 1
                 log.exception("SELFTEST: voice dismissal FAILED")
+
+        # The file paths, run through the real tools inside the packaged
+        # process. A screenshot 'saved to the Desktop' reported success
+        # while landing in an unredirected folder that never appears on
+        # screen, and every check passed because both folders exist. So
+        # this asserts the file reaches the desktop Windows actually
+        # renders, and that find_files can then locate what it wrote.
+        try:
+            from ..folders import save_folder
+            from ..tools.documents import create_pdf
+            from ..tools.files import find_files
+            from ..tools.system import take_screenshot
+
+            desktop = save_folder('desktop')
+            before = set(desktop.glob('*'))
+
+            said_shot = await asyncio.to_thread(take_screenshot, 'desktop')
+            said_pdf = await asyncio.to_thread(
+                create_pdf, 'Selftest', 'Written by the packaged app.',
+                'jarvis_selftest', 'desktop')
+            log.info('SELFTEST: screenshot -> %s', said_shot)
+            log.info('SELFTEST: pdf        -> %s', said_pdf)
+
+            written = sorted(set(desktop.glob('*')) - before)
+            log.info('SELFTEST: %d new file(s) on %s', len(written), desktop)
+            if len(written) < 2:
+                failures += 1
+                log.error('SELFTEST: expected 2 files on the visible '
+                          'desktop, saw %d', len(written))
+
+            located = await asyncio.to_thread(find_files, 'jarvis_selftest')
+            if 'jarvis_selftest' in located:
+                log.info('SELFTEST: find_files located what it just wrote')
+            else:
+                failures += 1
+                log.error('SELFTEST: find_files missed it -- %s', located)
+
+            for f in written:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+            log.info('SELFTEST: removed %d test file(s)', len(written))
+        except Exception:
+            failures += 1
+            log.exception('SELFTEST: file paths FAILED')
 
         # And the state the interface reports must match reality.
         log.info("SELFTEST: minimized=%s fullscreen_active=%s",

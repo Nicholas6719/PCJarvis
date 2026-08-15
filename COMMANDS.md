@@ -93,6 +93,29 @@ Anything opened is brought to the front.
 Memory is for facts about you that shape later answers. Notes are jottings you
 read back.
 
+### Text you have copied
+**"proofread this"** · **"fix this"** · **"rewrite this to be more formal"** ·
+**"summarise this"** · **"translate this into Spanish"**
+
+"This" always means the clipboard. Copy something first, then ask. The result
+goes straight back onto your clipboard so you can paste it — except a summary,
+which is spoken instead, since a summary you have to paste to read defeats the
+point.
+
+All of it runs on the local model. Nothing you copy leaves the machine, which
+matters more here than anywhere else: the clipboard is where passwords and
+half-written messages live.
+
+### What is on screen
+**"what page am I on?"** · **"what am I looking at?"** · **"open a new tab"** ·
+**"close this tab"**
+
+Read from the window title, so it needs no browser extension and works with
+Chrome, Edge, Firefox and Brave. If the browser is not in front he says so
+rather than guessing. Closing a tab refuses outright unless a browser is
+actually focused — Ctrl+W in the wrong window closes a document, not a tab —
+and he tells you Ctrl+Shift+T brings it back.
+
 ---
 
 ## Through the model

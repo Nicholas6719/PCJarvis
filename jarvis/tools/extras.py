@@ -239,8 +239,17 @@ def list_capabilities(area: str = "") -> str:
         "memory": "remember things about you and recall them",
         "timers": "set and cancel timers",
         "documents": "make PDFs, save notes, export our conversation",
-        "browser": "open sites, search YouTube, get directions",
+        "browser": "open sites, search YouTube, get directions, and tell you "
+                   "what page you are on",
+        "text": "proofread, rewrite, summarise or translate whatever you have "
+                "copied",
     }
+    # A category with no entry here is dropped from the overview entirely, so
+    # a whole area can go unmentioned while its tools work perfectly well.
+    missing = sorted(set(areas) - set(summary) - {"general"})
+    if missing:
+        log.debug("no overview text for: %s", ", ".join(missing))
+
     have = [text for cat, text in summary.items() if cat in areas]
     return ("I can " + "; ".join(have)
             + f". That is {len(REGISTRY)} tools in total. Ask about any one "

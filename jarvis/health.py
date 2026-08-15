@@ -234,4 +234,34 @@ def startup_check() -> dict:
     else:
         log.info("memory: %.1f GB free of %.0f GB (%.0f%% used)",
                  report["available_gb"], report["total_gb"], report["percent"])
+
+    # What we actually resolved, recorded at boot because both of these
+    # have moved under us without warning. The default microphone changes
+    # the moment a headset connects, and OneDrive redirected the Desktop,
+    # so files saved 'to the Desktop' landed somewhere never seen. Neither
+    # failure announced itself; a line in the log would have.
+    try:
+        from .audio.mic import list_input_devices
+        from .audio.player import list_output_devices
+
+        mic = next((d['name'] for d in list_input_devices()
+                    if d['default']), 'unknown')
+        speaker = next((d['name'] for d in list_output_devices()
+                        if d['default']), 'unknown')
+        report['input_device'] = mic
+        report['output_device'] = speaker
+        log.info('audio in: %s', mic)
+        log.info('audio out: %s', speaker)
+    except Exception:
+        log.debug('could not enumerate audio devices', exc_info=True)
+
+    try:
+        from .folders import describe
+
+        resolved = describe()
+        report['folders'] = resolved
+        log.info('desktop resolves to %s', resolved.get('desktop'))
+    except Exception:
+        log.debug('could not resolve shell folders', exc_info=True)
+
     return report

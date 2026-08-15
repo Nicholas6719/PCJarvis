@@ -272,7 +272,19 @@ def take_screenshot(location: str = "") -> str:
         folder.mkdir(parents=True, exist_ok=True)
 
         path = folder / f"screen_{time.strftime('%Y%m%d_%H%M%S')}.png"
-        pyautogui.screenshot().save(path)
+        shot = pyautogui.screenshot()
+
+        # Windows refuses to capture the secure desktop, so a locked
+        # session -- or a display that has powered down -- comes back as
+        # pure black on every capture path there is. The file still
+        # writes and still has a plausible size, and announcing
+        # 'screenshot saved, 7 KB' for a black rectangle is the same
+        # confident lie as announcing a PDF that was never created.
+        # One uniform colour across the whole frame does not happen by
+        # accident on a screen in use.
+        low, high = shot.convert('L').getextrema()
+        blank = low == high
+        shot.save(path)
 
         # Confirm from the file on disk. Asked to save one to the Desktop, an
         # earlier version put it in Pictures and let the model announce the
@@ -282,6 +294,11 @@ def take_screenshot(location: str = "") -> str:
         size = path.stat().st_size
         if problem:
             return f"{problem}. It is saved as {path.name}."
+        if blank:
+            return (f"That came out completely blank. The screen was locked "
+                    f"or switched off, and Windows will not capture either. "
+                    f"I saved it as {path.name} on {spoken_where}, but there "
+                    f"is nothing in it -- unlock the screen and ask me again.")
         return (f"Screenshot saved as {path.name} on {spoken_where} "
                 f"({size/1024:.0f} KB).")
     except Exception as e:

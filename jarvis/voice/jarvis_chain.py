@@ -300,6 +300,4 @@ def apply_chain(audio: np.ndarray, sr: int, cfg: dict,
     return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def invalidate_cache() -> None:
-    """Called when room settings change during live tuning."""
-    _IR_CACHE.clear()
+

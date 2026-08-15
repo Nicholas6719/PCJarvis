@@ -109,6 +109,27 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    # -- what is on screen, read from the window title --
+    "current_page":        {"what page", "what site", "what website",
+                            "what am i looking at", "this page",
+                            "which page", "what tab"},
+    "open_new_tab":        {"new tab"},
+    "close_tab":           {"close tab", "close this tab",
+                            "close the tab"},
+
+    # -- working on copied text, all on-device --
+    # "this" almost always means the clipboard when he asks for one of
+    # these, so the triggers are the verbs rather than the word clipboard.
+    "proofread_clipboard": {"proofread", "fix this", "correct this",
+                            "check my spelling", "spellcheck", "grammar"},
+    "rewrite_clipboard":   {"rewrite", "reword", "rephrase", "make this",
+                            "more formal", "more professional",
+                            "friendlier", "shorter"},
+    "summarise_clipboard": {"summarise", "summarize", "summary", "gist",
+                            "what does this say", "tldr"},
+    "translate_clipboard": {"translate", "in spanish", "in french",
+                            "in german", "in italian", "in japanese"},
+
     # -- spotify, driven through the desktop app --
     "play_music":          {"play", "put on", "listen to", "music",
                             "song", "spotify"},
@@ -142,10 +163,6 @@ def select(query: str, limit: int | None = None) -> list[dict]:
         log.debug("admitted extras: %s", names[len(CORE):])
     return schemas
 
-
-def select_names(query: str, limit: int | None = None) -> list[str]:
-    """The selection as names -- used by the diagnostics."""
-    return [s["function"]["name"] for s in select(query, limit)]
 
 
 def warm_prefix_query() -> str:

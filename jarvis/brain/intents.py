@@ -184,6 +184,36 @@ INTENTS: list[Intent] = [
            "add_note", lambda m: {"text": m.group("text").strip()}),
     Intent(r"^(?:jarvis[,\s]+)?(?:read|what\s+are)\s+my\s+notes\s*[.?!]?$", "read_notes"),
 
+    # ══ working on what he has copied ══
+    # "this" means the clipboard. The tool still calls the model to do the
+    # work, so the saving here is only the tool-selection round trip -- but
+    # that is about a second, on a phrase he is likely to use often.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:proofread|spell\s*check|"
+           r"fix|correct)\s+(?:this|that|it)\s*[.!?]?$",
+           "proofread_clipboard"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:summarise|summarize)\s+"
+           r"(?:this|that|it)\s*[.!?]?$",
+           "summarise_clipboard"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?translate\s+(?:this|that|it)\s+"
+           r"(?:in)?to\s+(?P<lang>[a-z]+)\s*[.!?]?$",
+           "translate_clipboard", lambda m: {"language": m.group("lang")}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?rewrite\s+(?:this|that|it)\s+"
+           r"(?:to\s+be\s+|to\s+sound\s+|so\s+it\s+is\s+)?"
+           r"(?P<style>[a-z ]+?)\s*[.!?]?$",
+           "rewrite_clipboard", lambda m: {"style": m.group("style").strip()}),
+
+    # ══ what is on screen ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:what|which)\s+(?:page|site|website|tab)\s+"
+           r"(?:am\s+i\s+on|is\s+(?:this|open)|are\s+we\s+on)\s*[.?!]?$",
+           "current_page"),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+am\s+i\s+looking\s+at\s*[.?!]?$",
+           "current_page"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?open\s+a\s+new\s+tab\s*[.!?]?$",
+           "open_new_tab"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?close\s+(?:this\s+|the\s+)?tab"
+           r"\s*[.!?]?$",
+           "close_tab"),
+
     # ══ opening things ══
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:open|show|go to)\s+"
            r"(?:my\s+|the\s+)?(?P<folder>downloads|documents|desktop|pictures|"

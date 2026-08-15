@@ -148,9 +148,6 @@ def tool(
 
 
 # ── access ─────────────────────────────────────────────────────────
-def all_schemas() -> list[dict]:
-    return [t.schema for t in REGISTRY.values()]
-
 
 def get(name: str) -> Tool | None:
     return REGISTRY.get(name)
@@ -184,6 +181,7 @@ async def execute(name: str, arguments: dict) -> str:
 def load_all() -> int:
     """Import every tool module so their decorators run."""
     from . import (browser, documents, extras, files,  # noqa: F401
-                   media, memory_tools, spotify, system, timers, web)
+                   media, memory_tools, spotify, system, text, timers,
+                   web)
 
     return len(REGISTRY)

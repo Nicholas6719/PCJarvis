@@ -77,16 +77,21 @@ overuses it.
 
 ## Phase 2 — Make actions real
 
-**2.1 Spotify.** Authorization-code flow with a refresh token stored under
-`data/`, local callback on `127.0.0.1`. Tools: play by name, play a playlist,
-shuffle, what's playing, transfer to a device, set volume. SMTC stays as the
-fallback for every other player, so nothing regresses if the link is removed.
+**2.1 Spotify.** *Superseded.* This originally specified an
+authorization-code flow with a client ID and secret from a free developer
+app. Nicholas ruled that out directly: "I want it to use my physical
+player... I don't want to use any ID or anything like that."
 
-> **Needs you:** Spotify requires a free developer app for a client ID. I can't
-> register accounts, so that is two minutes at
-> developer.spotify.com — create an app, set the redirect URI to
-> `http://127.0.0.1:8888/callback`, and give me the client ID and secret. I'll
-> keep them out of git.
+What was built instead is keyless. A track or playlist name is resolved to
+a `spotify:` URI through a web search, and the URI is handed to the
+desktop app, which plays it immediately -- no account link, no token, no
+secret in the repo. SMTC remains the fallback for every other player.
+
+The cost of going keyless is that the tool cannot read Spotify's library
+directly, so resolution depends on the search result being right. That is
+why playback is verified against the live media session rather than
+assumed: an earlier version announced "playing the lofi beats playlist"
+while ZZ Top was actually playing.
 
 **2.2 Deterministic coverage.** Move the common imperatives out of the model's
 hands entirely — play/stop/next, volume, apps, folders, browser, timers. The
@@ -101,13 +106,24 @@ more than a pleasant lie.
 
 ## Phase 3 — Feature parity
 
-Mechanical, low-risk, done in one sweep:
+Mechanical, low-risk, done in one sweep. All five have landed:
 
-- Windows app + folder alias map, tolerant of mishearings; open standard folders
-- Browser control: open a site, search, new/close tab, what page am I on
-- Clipboard augmentation: fix / rewrite / proofread / summarise / translate this
-- Timers and quick reminders, spoken naturally ("give me two minutes")
-- Navigation: "directions to X" opens a route
+- **Done.** Windows app + folder alias map; open standard folders. Folder
+  names resolve through `folders.py` rather than `Path.home()`, because
+  OneDrive redirects Desktop, Documents and Pictures on this machine and
+  the naive path is a real folder that never appears on screen.
+- **Done.** Browser control: open a site, search, new tab, close tab, and
+  "what page am I on". Read from the window title -- no extension, no
+  debugging port. Closing a tab refuses unless a browser is genuinely
+  focused, since ctrl+w elsewhere closes a document.
+- **Done.** Clipboard augmentation: proofread / rewrite / summarise /
+  translate. Runs on the local model, so nothing copied leaves the
+  machine. The result goes back on the clipboard; a summary is spoken
+  instead, because one you must paste to read is no use.
+- **Done.** Timers, spoken naturally. Note the failure that took three
+  attempts: the task was collected mid-sleep because asyncio holds only a
+  weak reference to it. `scripts/audit.py` now checks for that shape.
+- **Done.** Navigation: "directions to X" opens a route.
 
 ---
 

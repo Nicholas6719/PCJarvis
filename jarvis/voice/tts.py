@@ -21,7 +21,7 @@ from scipy import signal as _sig
 
 from ..config import BUNDLE, MODELS_DIR
 from . import jarvis_chain
-from .pronounce import for_speech, split_for_synthesis
+from .pronounce import for_speech
 
 log = logging.getLogger("jarvis.tts")
 

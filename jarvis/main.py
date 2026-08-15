@@ -37,10 +37,29 @@ from jarvis.config import CONFIG, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
 from jarvis.tools import documents, memory_tools, registry  # noqa: E402
+from jarvis.tools import text as text_tools  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
 from jarvis.voice.tts import Voice, make_chime  # noqa: E402
 
 log = logging.getLogger("jarvis")
+
+# Strong references to every background task started here.
+#
+# asyncio keeps only a weak reference to a running task, so a task nobody
+# holds can be collected mid-await and simply stop. That is not theory:
+# it is exactly why the timer never fired -- the sleeping task was
+# collected before it woke. The announcement and window-restore paths
+# below await playback for seconds at a time, the widest window of all,
+# so every fire-and-forget task goes through _spawn.
+_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    """Start a background task and keep it alive until it finishes."""
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+    return task
 
 YES = {"yes", "yeah", "yep", "confirm", "confirmed", "do it", "go ahead",
        "proceed", "affirmative", "please do", "sure", "correct"}
@@ -162,6 +181,7 @@ class Jarvis:
         documents.bind(self.memory)   # so he can export the conversation
 
         self.brain = Brain(self.cfg, self.memory)
+        text_tools.bind(self.brain)   # proofread/rewrite, all on-device
         ok, message = await self.brain.available()
         if not ok:
             log.error("brain unavailable: %s", message)
@@ -374,13 +394,12 @@ class Jarvis:
     def _on_wake(self) -> None:
         self.chime()
         # Whatever he was -- idle, asleep -- he is awake now.
-        asyncio.create_task(BUS.emit("conversation.open",
-                                     seconds=self.cfg.get(
-                                         "conversation.window_s", 15)))
+        _spawn(BUS.emit("conversation.open",
+                        seconds=self.cfg.get("conversation.window_s", 15)))
         if self.listener:
             self.listener.extend_conversation()
-        asyncio.create_task(self.set_state(State.LISTENING))
-        asyncio.create_task(BUS.emit("window.restore"))
+        _spawn(self.set_state(State.LISTENING))
+        _spawn(BUS.emit("window.restore"))
 
     def _on_barge_in(self) -> None:
         """He was cut off. Drop everything and listen."""
@@ -393,7 +412,7 @@ class Jarvis:
             self.listener.end_speaking()
             self.listener.extend_conversation()
         self.chime()
-        asyncio.create_task(self.set_state(State.LISTENING))
+        _spawn(self.set_state(State.LISTENING))
 
     # ── speaking unprompted ────────────────────────────────────────
     async def _say_proactively(self, text: str) -> None:
@@ -465,10 +484,10 @@ class Jarvis:
         BUS.on("ui.interrupt", lambda _: self._on_barge_in())
         BUS.on("wake.detected", lambda _: self._on_wake())
         BUS.on("barge_in", lambda _: self._on_barge_in())
-        BUS.on("proactive", lambda ev: asyncio.create_task(
+        BUS.on("proactive", lambda ev: _spawn(
             self._say_proactively(ev.get("text", ""))))
         # When the window closes the interface must stop saying "listening".
-        BUS.on("conversation.ended", lambda _: asyncio.create_task(
+        BUS.on("conversation.ended", lambda _: _spawn(
             self._on_conversation_ended()))
 
         listen_task = asyncio.create_task(self.listener.run())
