@@ -93,6 +93,35 @@ Anything opened is brought to the front.
 Memory is for facts about you that shape later answers. Notes are jottings you
 read back.
 
+### Protocols
+**"initiate the work protocol"** · **"work mode"** · **"run good night"** ·
+**"list my protocols"**
+
+A protocol is a name for a list of actions. Two come defined: **work**
+(pause music, volume down, report memory) and **good night** (pause music,
+dim the screen, lock up). The wording is forgiving — "work", "work mode"
+and "the work protocol" are the same thing.
+
+Ask him to create one and he will, or edit `data/protocols.json` directly.
+He refuses to put anything irreversible in a protocol — no shutdown, no
+shell commands — because one misheard word should not be able to do real
+damage. Ask for those directly and he confirms first.
+
+### Things he says without being asked
+He now speaks up on his own: a battery running down, a disk filling, memory
+under pressure, something pinning the processor for minutes, a download
+finishing, and how long you have been sitting there.
+
+The thresholds are high on purpose and each one only speaks when a limit is
+*crossed*, so a value sitting near the line does not produce a running
+commentary. If you have dismissed him, only a critical battery gets through.
+All of it is tunable under `watch:` in `config.yaml`; set `enabled: false`
+to switch it off entirely.
+
+He also mentions things before doing what you asked — a timer still running
+when you shut down, unsaved work in an editor. He says it once and then does
+as he was told.
+
 ### Text you have copied
 **"proofread this"** · **"fix this"** · **"rewrite this to be more formal"** ·
 **"summarise this"** · **"translate this into Spanish"**
