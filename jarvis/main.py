@@ -33,7 +33,7 @@ from jarvis.brain import persona  # noqa: E402
 from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
-from jarvis import history, quiet, standing  # noqa: E402
+from jarvis import briefing, history, quiet, standing  # noqa: E402
 from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
@@ -336,6 +336,9 @@ class Jarvis:
         # from it half an hour ago.
         if getattr(self, "watcher", None):
             self.watcher.note_activity()
+        # Touched every turn rather than only on exit: a crash or a pulled
+        # power cable would otherwise look like a two-day absence next time.
+        history.meta_set("last_seen", time.time())
 
         self._interrupted = False
         # Hold the window open for the whole turn. Without this a slow reply
@@ -547,8 +550,17 @@ class Jarvis:
         if greet:
             # Not conversational: he has not asked for anything yet, so the
             # window stays shut and the wake word is still required.
-            await self.speak(persona.pick(persona.GREETINGS, self.cfg),
+            hello = persona.pick(persona.GREETINGS, self.cfg)
+
+            # What happened while he was away, if anything did. Usually this
+            # is empty and he simply says good evening, which is correct --
+            # a status report after a ten minute absence is an alarm system,
+            # not a butler.
+            report = briefing.compose(self.cfg,
+                                      history.meta_get("last_seen", 0.0))
+            await self.speak(f"{hello} {report}".strip(),
                              conversational=False)
+            history.meta_set("last_seen", time.time())
 
         try:
             async for text in self.listener.utterances():

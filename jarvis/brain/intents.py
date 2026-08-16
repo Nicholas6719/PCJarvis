@@ -265,6 +265,15 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:and|what\s+about|how\s+about)\s+tomorrow\s*[.?!]?$",
            "get_weather", _tomorrow_args, guard=_weather_recent),
 
+    # ══ what he saw while you were out, and what you were doing ══
+    Intent(r"^(?:jarvis[,\s]+)?what\s+did\s+i\s+miss\s*[.?!]?$",
+           "what_did_i_miss"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:did\s+)?anything\s+(?:happen|come\s+up)\s*[.?!]?$", "what_did_i_miss"),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+(?:have\s+i\s+been|was\s+i)\s+(?:working\s+on|doing)(?:\s+today)?\s*[.?!]?$",
+           "what_have_i_been_doing"),
+    Intent(r"^(?:jarvis[,\s]+)?where\s+has\s+my\s+day\s+gone\s*[.?!]?$",
+           "what_have_i_been_doing"),
+
     # ══ standing watches ══
     # Ordered narrowest first. The last pattern would happily swallow the
     # download and battery phrasings, so they get their turn before it.

@@ -318,6 +318,7 @@ class Watcher:
             import psutil
 
             battery = psutil.sensors_battery()
+            history.record_app(history.foreground_app())
             history.record(
                 cpu=self._cpu_window[-1] if self._cpu_window else None,
                 memory=psutil.virtual_memory().percent,
@@ -342,6 +343,7 @@ class Watcher:
         if obs.critical:
             return True
         if quiet.active():
+            quiet.defer(obs.id, obs.text)
             return False
         if self._state_getter is None:
             return True

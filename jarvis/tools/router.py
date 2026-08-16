@@ -112,6 +112,10 @@ EXTRAS: dict[str, set[str]] = {
     "get_trend":           {"has been", "this week", "usual", "lately",
                             "trend", "over time", "compared to"},
 
+    "what_did_i_miss":        {"what did i miss", "anything happen"},
+    "what_have_i_been_doing": {"been working on", "was i doing",
+                               "my day gone", "been doing"},
+
     # -- things he is asked to keep an eye on --
     "watch_for_process":   {"tell me when", "let me know when", "when it is done",
                             "when the build", "when it finishes"},

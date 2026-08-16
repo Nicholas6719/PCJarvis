@@ -34,6 +34,17 @@ CREATE TABLE IF NOT EXISTS readings (
     plugged  INTEGER
 );
 CREATE INDEX IF NOT EXISTS readings_at ON readings (at);
+
+CREATE TABLE IF NOT EXISTS context (
+    at   REAL NOT NULL,
+    app  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS context_at ON context (at);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value REAL
+);
 """
 
 KEEP_DAYS = 14
@@ -79,11 +90,117 @@ def record(cpu: float | None = None, memory: float | None = None,
             # sixty times an hour, is still sixty write transactions.
             if time.time() - _last_prune > 3600:
                 _last_prune = time.time()
-                _db.execute("DELETE FROM readings WHERE at < ?",
-                            (time.time() - KEEP_DAYS * 86400,))
+                cutoff = time.time() - KEEP_DAYS * 86400
+                _db.execute("DELETE FROM readings WHERE at < ?", (cutoff,))
+                _db.execute("DELETE FROM context WHERE at < ?", (cutoff,))
             _db.commit()
     except Exception:
         log.debug("could not record a reading", exc_info=True)
+
+
+def meta_set(key: str, value: float) -> None:
+    if _db is None:
+        return
+    try:
+        with _lock:
+            _db.execute("INSERT INTO meta (key, value) VALUES (?,?) "
+                        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                        (key, float(value)))
+            _db.commit()
+    except Exception:
+        log.debug("could not write meta %s", key, exc_info=True)
+
+
+def meta_get(key: str, default: float = 0.0) -> float:
+    if _db is None:
+        return default
+    try:
+        row = _db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+        return float(row["value"]) if row else default
+    except Exception:
+        return default
+
+
+def foreground_app() -> str:
+    """The application in front, by process name.
+
+    The process name and not the window title, deliberately. Titles carry
+    the subject of the email, the name of the document, the page being read
+    -- none of which should end up in a log on disk merely because he asked
+    what he had been doing. "code" and "chrome" answer that question
+    perfectly well.
+    """
+    try:
+        import ctypes
+
+        import psutil
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return ""
+        pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if not pid.value:
+            return ""
+        name = psutil.Process(pid.value).name() or ""
+        return name[:-4] if name.lower().endswith(".exe") else name
+    except Exception:
+        log.debug("could not read the foreground application", exc_info=True)
+        return ""
+
+
+def record_app(name: str) -> None:
+    if _db is None or not name:
+        return
+    try:
+        with _lock:
+            _db.execute("INSERT INTO context (at, app) VALUES (?,?)",
+                        (time.time(), name))
+            _db.commit()
+    except Exception:
+        log.debug("could not record the foreground application", exc_info=True)
+
+
+def app_summary(hours: float = 8.0, limit: int = 4) -> str:
+    """What he has been in, most first.
+
+    Samples are a minute apart, so counting them is counting minutes -- near
+    enough for "most of the afternoon" and far simpler than tracking spans
+    across gaps, sleeps and restarts.
+    """
+    if _db is None:
+        return "I have not been keeping track."
+    since = time.time() - max(0.25, float(hours)) * 3600
+    rows = _db.execute(
+        "SELECT app, COUNT(*) n FROM context WHERE at >= ? "
+        "GROUP BY app ORDER BY n DESC", (since,)).fetchall()
+    rows = [r for r in rows if r["n"] >= 2]
+    if not rows:
+        return "Nothing much, as far as I can tell."
+
+    total = sum(r["n"] for r in rows)
+    parts = []
+    for row in rows[:limit]:
+        minutes = row["n"]
+        if minutes >= 90:
+            span = f"{minutes / 60:.0f} hours"
+        else:
+            span = f"{minutes} minutes"
+        parts.append(f"{row['app']} for {span}")
+    line = ", ".join(parts[:-1])
+    line = f"{line}, and {parts[-1]}" if len(parts) > 1 else parts[0]
+    return f"Mostly {line}."
+
+
+def busiest_app(hours: float = 8.0) -> str:
+    if _db is None:
+        return ""
+    row = _db.execute(
+        "SELECT app, COUNT(*) n FROM context WHERE at >= ? "
+        "GROUP BY app ORDER BY n DESC LIMIT 1",
+        (time.time() - hours * 3600,)).fetchone()
+    return row["app"] if row and row["n"] >= 5 else ""
 
 
 def _window(field: str, start: float, end: float) -> dict | None:

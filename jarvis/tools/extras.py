@@ -361,3 +361,32 @@ def get_trend(component: str = "memory", days: float = 7.0) -> str:
     from .. import history
 
     return history.summarise(component, days)
+
+
+@tool(category="system")
+def what_have_i_been_doing(hours: float = 8.0) -> str:
+    """What applications he has been in recently.
+
+    Use for "what have I been working on", "what was I doing today",
+    "where has my day gone".
+
+    Args:
+        hours: How far back to look.
+    """
+    from .. import history
+
+    return history.app_summary(hours)
+
+
+@tool(category="system")
+def what_did_i_miss() -> str:
+    """Report anything he noticed and kept to himself.
+
+    Use for "what did I miss", "anything happen", "did anything come up".
+    """
+    from .. import quiet
+
+    held = quiet.take_deferred()
+    if not held:
+        return "Nothing worth mentioning."
+    return " ".join(h.rstrip(".") + "." for h in held[:3])

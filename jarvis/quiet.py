@@ -30,7 +30,8 @@ from pathlib import Path
 log = logging.getLogger("jarvis.quiet")
 
 STORE: Path | None = None          # set by configure()
-_state: dict = {"quiet_since": 0.0, "expires_at": 0.0, "snoozed": {}}
+_state: dict = {"quiet_since": 0.0, "expires_at": 0.0,
+                "snoozed": {}, "deferred": []}
 _expire_hours = 12.0
 
 
@@ -50,7 +51,8 @@ def _load() -> None:
         if isinstance(loaded, dict):
             _state = {"quiet_since": float(loaded.get("quiet_since", 0.0)),
                       "expires_at": float(loaded.get("expires_at", 0.0)),
-                      "snoozed": dict(loaded.get("snoozed", {}))}
+                      "snoozed": dict(loaded.get("snoozed", {})),
+                      "deferred": list(loaded.get("deferred", []))}
     except Exception:
         log.debug("could not read the quiet state", exc_info=True)
 
@@ -129,6 +131,28 @@ def clear_snoozes() -> int:
     _save()
     return n
 
+
+
+# ── what he kept to himself ────────────────────────────────────────
+# Suppressing an observation used to discard it. Holding it instead costs
+# nothing and means the morning has something to report: the point of quiet
+# hours is that he stops talking, not that he stops noticing.
+def defer(observation_id: str, text: str) -> None:
+    held = _state.setdefault("deferred", [])
+    if any(h.get("id") == observation_id for h in held):
+        return                      # one mention each, however many times
+    held.append({"id": observation_id, "text": text, "at": time.time()})
+    del held[:-8]                   # a backlog nobody wants read out
+    _save()
+
+
+def take_deferred() -> list[str]:
+    """Everything held back, and clear it. Reporting twice is worse."""
+    held = _state.get("deferred", [])
+    _state["deferred"] = []
+    if held:
+        _save()
+    return [h.get("text", "") for h in held if h.get("text")]
 
 
 # ── what he last said unprompted ───────────────────────────────────
