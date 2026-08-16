@@ -65,6 +65,8 @@ class Watcher:
         self._known_downloads: set[str] = set()
         self._downloads_primed = False
         self._running = False
+        self._stop = None          # asyncio.Event, made inside the loop
+        self._loop = None
 
     # ── plumbing ───────────────────────────────────────────────────
     def note_activity(self) -> None:
@@ -301,15 +303,33 @@ class Watcher:
         except Exception:
             return True
 
+    async def _wait(self, seconds: float) -> None:
+        """Sleep, but wake the instant we are told to stop.
+
+        A plain asyncio.sleep here made closing JARVIS hang. The loop opens
+        by waiting two minutes for the machine to settle, and a stop arriving
+        during that wait was not noticed until it expired -- so the window
+        shut, the model unloaded, and the process sat there holding 1.2 GB
+        for another hundred seconds before it would exit.
+        """
+        if self._stop is None:
+            return
+        try:
+            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass
+
     async def run(self) -> None:
         interval = max(float(self.cfg.get("watch.interval_s", 60)), 5.0)
         self._running = True
+        self._stop = asyncio.Event()
+        self._loop = asyncio.get_running_loop()
         log.info("ambient watch running, every %.0fs", interval)
 
         # Let the machine settle before forming an opinion of it. Boot is the
         # busiest the processor will be all session, and remarking on that
         # would be both wrong and the very first thing he ever said unprompted.
-        await asyncio.sleep(min(interval * 2, 120))
+        await self._wait(min(interval * 2, 120))
 
         while self._running:
             try:
@@ -323,7 +343,13 @@ class Watcher:
                 raise
             except Exception:
                 log.exception("ambient watch stumbled; carrying on")
-            await asyncio.sleep(interval)
+            await self._wait(interval)
 
     def stop(self) -> None:
+        """Called from the shutdown path, which is not this loop's thread."""
         self._running = False
+        if self._stop is not None and self._loop is not None:
+            try:
+                self._loop.call_soon_threadsafe(self._stop.set)
+            except RuntimeError:
+                pass          # loop already closed; nothing left to wake

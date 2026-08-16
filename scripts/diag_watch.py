@@ -196,6 +196,39 @@ check("the long-session remark can be disabled",
       ids(w._check_session()) == [])
 
 
+# -- shutting down ------------------------------------------------
+print("\n[shutdown] stopping must be immediate, not eventual")
+
+import asyncio  # noqa: E402
+import time as _time  # noqa: E402
+
+
+async def _stop_promptly():
+    """The loop opens by waiting two minutes for the machine to settle.
+
+    With a plain sleep there, closing JARVIS shut the window and unloaded
+    the model and then sat holding 1.2 GB until that wait expired -- about
+    a hundred seconds of a process that was supposed to be gone.
+    """
+    w = Watcher(Cfg())
+    task = asyncio.create_task(w.run())
+    await asyncio.sleep(0.3)
+    t0 = _time.time()
+    w.stop()
+    try:
+        await asyncio.wait_for(task, timeout=10)
+    except asyncio.TimeoutError:
+        return None
+    return _time.time() - t0
+
+
+took = asyncio.run(_stop_promptly())
+check("stops during the startup wait", took is not None,
+      "hung" if took is None else f"{took:.3f}s")
+check("and stops within a second", took is not None and took < 1.0,
+      f"{took:.3f}s" if took is not None else "hung")
+
+
 print("\n" + "=" * 66)
 print(f" {passed} passed, {failed} failed")
 print("=" * 66)
