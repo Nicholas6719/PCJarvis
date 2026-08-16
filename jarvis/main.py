@@ -341,9 +341,6 @@ class Jarvis:
         # from it half an hour ago.
         if getattr(self, "watcher", None):
             self.watcher.note_activity()
-        # Touched every turn rather than only on exit: a crash or a pulled
-        # power cable would otherwise look like a two-day absence next time.
-        history.meta_set("last_seen", time.time())
 
         self._interrupted = False
         # Hold the window open for the whole turn. Without this a slow reply
@@ -561,11 +558,9 @@ class Jarvis:
             # is empty and he simply says good evening, which is correct --
             # a status report after a ten minute absence is an alarm system,
             # not a butler.
-            report = briefing.compose(self.cfg,
-                                      history.meta_get("last_seen", 0.0))
+            report = briefing.missed()
             await self.speak(f"{hello} {report}".strip(),
                              conversational=False)
-            history.meta_set("last_seen", time.time())
 
         try:
             async for text in self.listener.utterances():

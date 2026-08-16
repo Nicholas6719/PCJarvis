@@ -137,6 +137,13 @@ tools:
 # comments on everything gets tuned out, and then the remark that mattered
 # is missed too. Each observation fires when a threshold is crossed, not
 # while it is exceeded, and re-arms only after the condition clears.
+# Whether anyone is at the machine. He holds anything he notices while you are
+# away and says it when you come back, rather than announcing it to an empty
+# room and counting it as delivered.
+presence:
+  enabled: true
+  away_after_s: 300         # five minutes of no keyboard or mouse
+
 watch:
   enabled: true
   interval_s: 60           # how often he looks; nothing is said most times

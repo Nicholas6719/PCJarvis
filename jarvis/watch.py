@@ -32,7 +32,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import history, patterns, quiet, schedules, standing
+from . import (briefing, history, patterns, presence, quiet,
+               schedules, standing)
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -58,6 +59,7 @@ class Watcher:
 
     def __init__(self, cfg, state_getter=None):
         self.cfg = cfg
+        self.presence = presence.Presence(cfg)
         self._state_getter = state_getter
         self._gates: dict[str, _Gate] = {}
         self._cpu_window: list[float] = []
@@ -359,6 +361,14 @@ class Watcher:
         """
         if quiet.snoozed(obs.id):
             return False
+
+        # Nobody there. Hold everything, urgent included -- announcing a
+        # finished download to an empty room counts it as delivered and it is
+        # never mentioned again, which is worse than not having the feature.
+        if not self.presence.present():
+            quiet.defer(obs.id, obs.text)
+            return False
+
         if obs.critical:
             return True
         if quiet.active():
@@ -401,6 +411,15 @@ class Watcher:
 
         while self._running:
             try:
+                self.presence.update()
+                if self.presence.take_return():
+                    # He is back. Say what he missed, and only that.
+                    caught_up = briefing.missed()
+                    if caught_up:
+                        log.info("catching him up: %s", caught_up)
+                        await BUS.emit("proactive", text=caught_up,
+                                       source="return")
+
                 for name in self._due_protocols:
                     log.info("running scheduled protocol: %s", name)
                     try:

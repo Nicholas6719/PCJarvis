@@ -1,85 +1,52 @@
 """What he says when you come back.
 
 He greeted you identically whether you had been gone five minutes or two days,
-which is the single clearest way an assistant announces that it has just been
-switched on. The films' JARVIS reports on arrival -- that is most of what makes
-him feel like he was still there while you were out.
+which is the clearest possible way of announcing that something has just been
+switched on.
 
-Nothing here is new information. It is assembled entirely from things he
-already had and previously threw away: observations held back during quiet
-hours, how long since he last saw you, what you were in the middle of, and
-whether any reading has moved enough to be worth a sentence.
+What this is not, deliberately: a summary. It never recaps the state of the
+machine, never reports a trend, never tells you how long you were gone. It says
+the things that happened while you were not there to hear them, and nothing
+else. A briefing that reads out a status report every time you come back from
+the kitchen gets switched off within a day.
 
-The hard constraint is length. This is spoken, it happens every single time,
-and a briefing that takes fifteen seconds to say will be resented by the third
-day. Two sentences. Most of the time it should be nothing at all -- coming back
-after ten minutes to a status report is not a butler, it is an alarm system.
+It never repeats. Anything he already said out loud while you were present was
+delivered, and saying it again ten minutes later is worse than not saying it at
+all -- so the queue holds only what was genuinely suppressed, and reading it
+clears it.
+
+Most returns produce nothing at all, because most of the time nothing happened
+while you were away. Silence is the correct and common answer.
 """
 from __future__ import annotations
 
 import logging
-import time
 
 log = logging.getLogger("jarvis.briefing")
 
-# Below this it is the same session and there is nothing to report.
-MIN_AWAY_S = 90 * 60
-
-# Above this, hours stop being the useful unit.
-DAY_S = 20 * 3600
+# However much piled up, this is spoken aloud the moment he comes back to the
+# desk. Three things is already a lot to be told before you have sat down.
+MAX_ITEMS = 3
 
 
-def _away_phrase(seconds: float) -> str:
-    if seconds >= DAY_S * 2:
-        return f"It has been {seconds / 86400:.0f} days."
-    if seconds >= DAY_S:
-        return "It has been a day."
-    return f"It has been {seconds / 3600:.0f} hours."
-
-
-def compose(cfg, last_seen: float) -> str:
-    """The whole briefing, or an empty string for silence.
-
-    Silence is the common case and the right default.
-    """
+def missed() -> str:
+    """Everything held back while he was away, or nothing. Clears the queue."""
     try:
-        from . import history, quiet
+        from . import quiet
 
-        parts: list[str] = []
-        away = time.time() - last_seen if last_seen else 0
-
-        if away and away >= MIN_AWAY_S:
-            parts.append(_away_phrase(away))
-
-        # Things he noticed and kept to himself. These are the reason the
-        # briefing is worth having at all.
         held = quiet.take_deferred()
-        if held:
-            # Two at most, and only the first sentence of each. The
-            # observations are written to stand alone, so they carry a
-            # recommendation after the fact -- "the disk is at 93%. Worth
-            # clearing some space." Useful when said on its own, three
-            # sentences too long inside a greeting. Anything still true will
-            # be noticed again anyway.
-            for item in held[:2]:
-                first = item.split(". ")[0].rstrip(".")
-                if first:
-                    parts.append(first + ".")
-
-        # Only mention a reading if it has genuinely moved. "Memory has been
-        # normal" is not worth saying out loud.
-        if away >= MIN_AWAY_S:
-            for component in ("memory", "disk"):
-                line = history.summarise(component, 7)
-                if "points higher" in line:
-                    parts.append(line.split(".")[-2].strip() + ".")
-                    break
-
-        if not parts:
+        if not held:
             return ""
 
-        # Never more than two sentences, however much was collected.
-        return " ".join(parts[:3])
+        parts = []
+        for item in held[:MAX_ITEMS]:
+            # First sentence only. The observations carry a recommendation
+            # after the fact -- "the disk is at 93%. Worth clearing some
+            # space." -- which is useful said alone and too long in a list.
+            first = item.split(". ")[0].rstrip(".")
+            if first:
+                parts.append(first + ".")
+        return " ".join(parts)
     except Exception:
-        log.debug("could not compose a briefing", exc_info=True)
+        log.debug("could not assemble what was missed", exc_info=True)
         return ""

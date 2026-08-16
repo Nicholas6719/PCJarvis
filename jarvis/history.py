@@ -41,10 +41,6 @@ CREATE TABLE IF NOT EXISTS context (
 );
 CREATE INDEX IF NOT EXISTS context_at ON context (at);
 
-CREATE TABLE IF NOT EXISTS meta (
-    key   TEXT PRIMARY KEY,
-    value REAL
-);
 """
 
 KEEP_DAYS = 14
@@ -96,29 +92,6 @@ def record(cpu: float | None = None, memory: float | None = None,
             _db.commit()
     except Exception:
         log.debug("could not record a reading", exc_info=True)
-
-
-def meta_set(key: str, value: float) -> None:
-    if _db is None:
-        return
-    try:
-        with _lock:
-            _db.execute("INSERT INTO meta (key, value) VALUES (?,?) "
-                        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                        (key, float(value)))
-            _db.commit()
-    except Exception:
-        log.debug("could not write meta %s", key, exc_info=True)
-
-
-def meta_get(key: str, default: float = 0.0) -> float:
-    if _db is None:
-        return default
-    try:
-        row = _db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
-        return float(row["value"]) if row else default
-    except Exception:
-        return default
 
 
 def foreground_app() -> str:
