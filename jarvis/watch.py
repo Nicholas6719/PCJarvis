@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import quiet
+from . import quiet, standing
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -65,6 +65,7 @@ class Watcher:
         self._last_activity = time.time()
         self._known_downloads: set[str] = set()
         self._downloads_primed = False
+        self._arrived: list[str] = []
         self._running = False
         self._stop = None          # asyncio.Event, made inside the loop
         self._loop = None
@@ -246,6 +247,9 @@ class Watcher:
 
         arrived = sorted(current - self._known_downloads)
         self._known_downloads = current
+        # Standing watches need to see these too, and this is the only place
+        # that knows which files are new.
+        self._arrived = arrived
         if not arrived:
             return out
 
@@ -286,6 +290,7 @@ class Watcher:
     # ── the loop ───────────────────────────────────────────────────
     def _collect(self) -> list[Observation]:
         found: list[Observation] = []
+        self._arrived = []
         for check in (self._check_power, self._check_storage,
                       self._check_memory, self._check_processor,
                       self._check_downloads, self._check_session):
@@ -293,6 +298,17 @@ class Watcher:
                 found.extend(check())
             except Exception:
                 log.debug("watch check %s failed", check.__name__, exc_info=True)
+
+        # Things he was asked to keep an eye on. Marked critical because he
+        # was asked: a requested report is not the same as an unsolicited
+        # remark, and silencing it during quiet hours would mean the answer to
+        # "tell me when the build is done" is sometimes no.
+        try:
+            for sentence in standing.check(self._arrived):
+                found.append(Observation(f"standing:{sentence[:24]}", sentence,
+                                         critical=True))
+        except Exception:
+            log.debug("standing watches failed", exc_info=True)
         return found
 
     def _may_speak(self, obs: Observation) -> bool:

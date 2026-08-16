@@ -109,6 +109,15 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    # -- things he is asked to keep an eye on --
+    "watch_for_process":   {"tell me when", "let me know when", "when it is done",
+                            "when the build", "when it finishes"},
+    "watch_for_battery":   {"when it is charged", "when the battery",
+                            "fully charged", "when it hits"},
+    "watch_for_download":  {"when the download", "when my download"},
+    "list_watches":        {"what are you watching", "watching for"},
+    "cancel_watch":        {"stop watching", "cancel watching"},
+
     # -- holding his tongue --
     "begin_quiet_hours":   {"quiet hours", "goodnight", "good night"},
     "end_quiet_hours":     {"good morning", "get to work", "i am back"},

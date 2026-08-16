@@ -82,6 +82,16 @@ def _timer_pending(m: "re.Match") -> bool:
         return False
 
 
+def _battery_level(m: "re.Match") -> dict:
+    level = m.groupdict().get("level")
+    direction = "below" if (m.groupdict().get("dir") or "") else "at"
+    return {"percent": int(level) if level else 100, "direction": direction}
+
+
+def _process_name(m: "re.Match") -> dict:
+    return {"name": m.group("what").strip(" ,.")}
+
+
 def _quiet_active(m: "re.Match") -> bool:
     """Only treat a greeting as "end quiet hours" if they are running.
 
@@ -254,6 +264,20 @@ INTENTS: list[Intent] = [
            "get_weather", lambda m: {"when": "tomorrow"}),
     Intent(r"^(?:jarvis[,\s]+)?(?:and|what\s+about|how\s+about)\s+tomorrow\s*[.?!]?$",
            "get_weather", _tomorrow_args, guard=_weather_recent),
+
+    # ══ standing watches ══
+    # Ordered narrowest first. The last pattern would happily swallow the
+    # download and battery phrasings, so they get their turn before it.
+    Intent(r"^(?:jarvis[,\s]+)?(?:tell|let)\s+me\s+(?:know\s+)?when\s+(?:the\s+|my\s+|that\s+)?downloads?\s+(?:is\s+|has\s+)?(?:finish(?:es|ed)?|done|completes?)\s*[.!?]?$",
+           "watch_for_download"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:tell|let)\s+me\s+(?:know\s+)?when\s+(?:it(?:'s| is)?|the\s+battery(?:\s+is)?)\s+(?:fully\s+)?(?:charged|full)\s*[.!?]?$",
+           "watch_for_battery", lambda m: {"percent": 100}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:tell|let)\s+me\s+(?:know\s+)?when\s+(?:the\s+)?battery\s+(?:is\s+|gets\s+|reaches\s+|hits\s+|(?P<dir>drops\s+below|falls\s+below|goes\s+below)\s*)(?:at\s+)?(?P<level>\d{1,3})\s*(?:percent|%)?\s*[.!?]?$",
+           "watch_for_battery", _battery_level),
+    Intent(r"^(?:jarvis[,\s]+)?(?:tell|let)\s+me\s+(?:know\s+)?when\s+(?:the\s+|my\s+)?(?P<what>[a-z0-9 .-]+?)\s+(?:is\s+|has\s+)?(?:finish(?:es|ed)?|done|completes?|closes?|exits?)\s*[.!?]?$",
+           "watch_for_process", _process_name),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+are\s+you\s+watching(?:\s+for)?\s*[.?!]?$", "list_watches"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:stop|cancel)\s+watching(?:\s+for)?(?:\s+everything)?\s*[.!?]?$", "cancel_watch"),
 
     # ══ quiet hours ══
     # Goodnight puts him away; the morning brings him back. Both are things

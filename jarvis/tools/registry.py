@@ -192,6 +192,6 @@ def load_all() -> int:
     """Import every tool module so their decorators run."""
     from . import (browser, documents, extras, files,  # noqa: F401
                    media, memory_tools, protocols, spotify, system,
-                   text, timers, web)
+                   text, timers, watches, web)
 
     return len(REGISTRY)
