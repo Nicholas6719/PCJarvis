@@ -40,6 +40,7 @@ from jarvis.tools import documents, memory_tools, registry  # noqa: E402
 from jarvis.tools import text as text_tools  # noqa: E402
 from jarvis.watch import Watcher  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
+from jarvis.voice.boot_sound import make_boot_sound  # noqa: E402
 from jarvis.voice.tts import Voice, make_chime  # noqa: E402
 
 log = logging.getLogger("jarvis")
@@ -201,6 +202,16 @@ class Jarvis:
             asyncio.to_thread(Voice, self.cfg),
         )
 
+        # The player only needs the voice's sample rate, so it can open here
+        # rather than at the end of boot -- which means the power-up plays
+        # *during* initialisation instead of after it, and the last of it is
+        # still ringing when he says good evening.
+        self.player = Player(sample_rate=self.voice.sample_rate,
+                             device=self.cfg.get("audio.output_device"))
+        self.player.start()
+        if self.cfg.get("audio.boot_sound", True):
+            asyncio.get_running_loop().run_in_executor(None, self._power_up)
+
         # Whisper and Kokoro warm in about two seconds and are needed the
         # moment he speaks, so they block. The language model takes ~35s to
         # load onto the GPU and prime its cache -- and nothing deterministic
@@ -220,8 +231,6 @@ class Jarvis:
             device=self.cfg.get("audio.input_device"),
             preroll_ms=self.cfg.get("vad.preroll_ms", 2000),
         )
-        self.player = Player(sample_rate=self.voice.sample_rate,
-                             device=self.cfg.get("audio.output_device"))
         self.speaker = Speaker(self.voice, self.player)
         self.listener = Listener(self.cfg, self.mic, stt)
         self._chime = make_chime(self.voice.sample_rate)
@@ -231,7 +240,6 @@ class Jarvis:
         self.watcher = Watcher(self.cfg, state_getter=lambda: self.state)
 
         self.mic.start()
-        self.player.start()
 
         log.info("ready in %.1fs (voice=%s, model=%s, wake=%.2f)",
                  time.perf_counter() - t0, self.voice.voice,
@@ -290,6 +298,22 @@ class Jarvis:
                        seconds=self.cfg.get("conversation.window_s", 15))
         await self.set_state(State.LISTENING if self.listener.in_conversation
                              else State.IDLE)
+
+    def _power_up(self) -> None:
+        """The arc reactor coming up to speed, on a worker thread.
+
+        Synthesising it costs a few hundred milliseconds of numpy, which is
+        not much but is pure dead air if it happens on the event loop while
+        the models are trying to load.
+        """
+        try:
+            audio = make_boot_sound(self.voice.sample_rate)
+            self.player.play(audio, self.voice.sample_rate)
+            log.info("power-up: %.1fs of arc reactor",
+                     len(audio) / self.voice.sample_rate)
+        except Exception:
+            log.debug("boot sound failed; carrying on in silence",
+                      exc_info=True)
 
     def chime(self) -> None:
         if self.cfg.get("wake.chime", True) and self.speaker:
