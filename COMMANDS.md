@@ -93,6 +93,12 @@ Anything opened is brought to the front.
 Memory is for facts about you that shape later answers. Notes are jottings you
 read back.
 
+Everything he remembers lives in `Documents\JARVIS\Memory` as one markdown
+file per fact. **Delete a file and he forgets it. Edit one and he believes the
+new version. Drop one in and he learns it** — no restart needed. Obsidian is
+installed; point it at that folder and you get search and a graph over
+everything he knows. Nothing requires it.
+
 ### Protocols
 **"initiate the work protocol"** · **"work mode"** · **"run good night"** ·
 **"list my protocols"**
@@ -121,6 +127,38 @@ to switch it off entirely.
 He also mentions things before doing what you asked — a timer still running
 when you shut down, unsaved work in an editor. He says it once and then does
 as he was told.
+
+### Asking him to watch for something
+**"tell me when the download finishes"** · **"tell me when it's charged"** ·
+**"tell me when the battery hits 80"** · **"let me know when handbrake
+finishes"** · **"what are you watching for?"** · **"stop watching"**
+
+These outlive the conversation. He keeps them across a restart and tells you
+when they happen, however long that takes. A program watch waits until it has
+actually seen the thing running, so asking before you start a build works.
+They fire once and forget themselves, and anything uncollected after a week
+is dropped.
+
+### Quiet hours
+**"goodnight Jarvis"** silences him. **"good morning"**, **"let's get to
+work"** or **"I'm back"** brings him back.
+
+Both are silent — he does not announce either, and saying good morning when he
+was never quiet just gets a greeting. Urgent things still get through, and it
+lapses on its own after twelve hours so forgetting to say good morning cannot
+mute him permanently.
+
+If one particular remark gets tiresome: **"stop telling me about that"** or
+**"don't mention that again"** silences that one thing for eight hours and
+leaves everything else alone.
+
+### How things have been
+**"how has my memory been this week?"** · **"has the CPU been busier than
+usual?"** · **"how has the battery been?"**
+
+He samples the machine every minute and keeps a fortnight, so these answer
+with a comparison rather than another reading. If he has nothing to compare
+against yet, he says so rather than implying a trend.
 
 ### Text you have copied
 **"proofread this"** · **"fix this"** · **"rewrite this to be more formal"** ·
