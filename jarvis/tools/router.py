@@ -135,6 +135,12 @@ EXTRAS: dict[str, set[str]] = {
     "delete_protocol":     {"delete the protocol", "remove the protocol",
                             "forget the protocol"},
 
+    # -- reading the screen itself, through the Windows OCR engine --
+    "read_screen":         {"what does this say", "read me", "read this",
+                            "on my screen", "on screen", "this error",
+                            "what does it say", "summarise this page"},
+    "find_on_screen":      {"can you see", "is there a", "do you see"},
+
     # -- what is on screen, read from the window title --
     "current_page":        {"what page", "what site", "what website",
                             "what am i looking at", "this page",

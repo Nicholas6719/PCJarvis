@@ -489,3 +489,55 @@ def run_command(command: str) -> str:
         return "That command took too long and I stopped it."
     except Exception as e:
         return f"Command failed: {e}"
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Reading the screen
+# ══════════════════════════════════════════════════════════════════
+@tool(category="screen", speak_while_running=True)
+def read_screen(whole_screen: bool = False) -> str:
+    """Read the text that is actually on screen right now.
+
+    Use for "what does this say", "read me that error", "what's on my screen",
+    "summarise this page", "what am I looking at".
+
+    Args:
+        whole_screen: True to read every window at once. Defaults to the
+            window in front, which is almost always what was meant -- reading
+            everything returns fragments of the taskbar and every background
+            window mixed together.
+    """
+    from ..screen import read, window_name
+
+    text, problem = read(whole_screen=bool(whole_screen))
+    if problem:
+        return problem
+
+    where = window_name()
+    where_line = f" (from {where})" if where else ""
+    # Same shape as the web tools: hand him the material with an instruction
+    # to answer from it, because reading a screenful of OCR aloud is useless.
+    return (f"Text currently on screen{where_line}. Answer his question from "
+            f"this, in one or two spoken sentences. Do NOT read it out "
+            f"verbatim and do not list it:\n{text[:3000]}")
+
+
+@tool(category="screen")
+def find_on_screen(text: str) -> str:
+    """Check whether something appears on screen right now.
+
+    Args:
+        text: The words to look for.
+    """
+    from ..screen import read
+
+    needle = (text or "").strip()
+    if not needle:
+        return "What should I look for?"
+
+    found, problem = read(whole_screen=True)
+    if problem:
+        return problem
+    if needle.lower() in found.lower():
+        return f"Yes, {needle} is on screen."
+    return f"No, I cannot see {needle} anywhere on screen."
