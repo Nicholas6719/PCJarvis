@@ -112,6 +112,9 @@ EXTRAS: dict[str, set[str]] = {
     "get_trend":           {"has been", "this week", "usual", "lately",
                             "trend", "over time", "compared to"},
 
+    "search_documents":       {"what did i write", "my notes on",
+                               "did i write", "anything about",
+                               "find my notes"},
     "what_did_i_miss":        {"what did i miss", "anything happen"},
     "what_have_i_been_doing": {"been working on", "was i doing",
                                "my day gone", "been doing"},

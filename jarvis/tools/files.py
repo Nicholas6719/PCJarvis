@@ -242,3 +242,20 @@ def open_file(path: str) -> str:
         return (f"Opened {resolved.name}. That name matched {count} files; "
                 f"I opened the most recent one.")
     return f"Opened {resolved.name}."
+
+
+@tool(category="files", speak_while_running=True)
+def search_documents(query: str) -> str:
+    """Search his own documents by meaning, not by filename.
+
+    Use for "what did I write about the router", "find my notes on the
+    project", "did I write anything about pricing".
+
+    Args:
+        query: What the document was about.
+    """
+    from .. import docs
+
+    if not (query or "").strip():
+        return "What should I look for?"
+    return docs.search(query)

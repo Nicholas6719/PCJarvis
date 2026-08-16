@@ -33,7 +33,8 @@ from jarvis.brain import persona  # noqa: E402
 from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
-from jarvis import briefing, history, quiet, schedules, standing  # noqa: E402
+from jarvis import (briefing, docs, history, quiet,  # noqa: E402
+                    schedules, standing)
 from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
@@ -177,6 +178,7 @@ class Jarvis:
         standing.configure(DATA_DIR)   # things he was asked to watch for
         history.configure(DATA_DIR)    # readings, so trends are answerable
         schedules.configure(DATA_DIR)  # protocols that run on their own
+        docs.configure(DATA_DIR)       # his own writing, searchable
 
         state = health.startup_check()
         if state.get("orphans_killed"):
@@ -192,6 +194,7 @@ class Jarvis:
 
         self.brain = Brain(self.cfg, self.memory)
         text_tools.bind(self.brain)   # proofread/rewrite, all on-device
+        docs.bind(self.memory._embed)  # the same embedder, not a second one
         ok, message = await self.brain.available()
         if not ok:
             log.error("brain unavailable: %s", message)
@@ -604,6 +607,7 @@ class Jarvis:
         if getattr(self, 'watcher', None):
             self.watcher.stop()
         history.close()
+        docs.close()
 
         if self.speaker:
             self.speaker.shutdown()
