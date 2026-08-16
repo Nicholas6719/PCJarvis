@@ -345,3 +345,19 @@ def clear_snoozes() -> str:
     if not n:
         return "Nothing was snoozed."
     return f"I will mention {n} thing(s) again."
+
+
+@tool(category="system")
+def get_trend(component: str = "memory", days: float = 7.0) -> str:
+    """How something has been over time, rather than what it is right now.
+
+    Use for "how has my memory been this week", "has the CPU been busier than
+    usual", "how has the battery been holding up".
+
+    Args:
+        component: "cpu", "memory", "disk" or "battery".
+        days: How far back to look.
+    """
+    from .. import history
+
+    return history.summarise(component, days)

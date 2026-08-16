@@ -109,6 +109,9 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    "get_trend":           {"has been", "this week", "usual", "lately",
+                            "trend", "over time", "compared to"},
+
     # -- things he is asked to keep an eye on --
     "watch_for_process":   {"tell me when", "let me know when", "when it is done",
                             "when the build", "when it finishes"},

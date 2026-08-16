@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import quiet, standing
+from . import history, quiet, standing
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -291,6 +291,7 @@ class Watcher:
     def _collect(self) -> list[Observation]:
         found: list[Observation] = []
         self._arrived = []
+        self._sample()
         for check in (self._check_power, self._check_storage,
                       self._check_memory, self._check_processor,
                       self._check_downloads, self._check_session):
@@ -310,6 +311,21 @@ class Watcher:
         except Exception:
             log.debug("standing watches failed", exc_info=True)
         return found
+
+    def _sample(self) -> None:
+        """One reading, for the history. Cheap, and never fatal."""
+        try:
+            import psutil
+
+            battery = psutil.sensors_battery()
+            history.record(
+                cpu=self._cpu_window[-1] if self._cpu_window else None,
+                memory=psutil.virtual_memory().percent,
+                disk=psutil.disk_usage(str(Path.home().anchor or "C:")).percent,
+                battery=battery.percent if battery else None,
+                plugged=bool(battery.power_plugged) if battery else None)
+        except Exception:
+            log.debug("could not take a reading", exc_info=True)
 
     def _may_speak(self, obs: Observation) -> bool:
         """Three reasons to stay silent, in order of how specific they are.
