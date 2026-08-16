@@ -33,8 +33,8 @@ from jarvis.brain import persona  # noqa: E402
 from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
-from jarvis import (briefing, docs, history, quiet,  # noqa: E402
-                    schedules, standing)
+from jarvis import (briefing, docs, history, patterns,  # noqa: E402
+                    quiet, schedules, standing)
 from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
@@ -179,6 +179,7 @@ class Jarvis:
         history.configure(DATA_DIR)    # readings, so trends are answerable
         schedules.configure(DATA_DIR)  # protocols that run on their own
         docs.configure(DATA_DIR)       # his own writing, searchable
+        patterns.configure(DATA_DIR)   # habits he has noticed
 
         state = health.startup_check()
         if state.get("orphans_killed"):

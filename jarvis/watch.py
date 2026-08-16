@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import history, quiet, schedules, standing
+from . import history, patterns, quiet, schedules, standing
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -312,6 +312,16 @@ class Watcher:
                 self._due_protocols.append(name)
         except Exception:
             log.debug("scheduled protocols failed", exc_info=True)
+
+        # A habit he has noticed. Rare by construction -- once a day at the
+        # very most, once ever for any given habit, and only after several
+        # days of evidence. He offers; he never acts.
+        try:
+            suggestion = patterns.offer()
+            if suggestion:
+                found.append(Observation("habit", suggestion))
+        except Exception:
+            log.debug("pattern noticing failed", exc_info=True)
 
         try:
             for sentence in standing.check(self._arrived):

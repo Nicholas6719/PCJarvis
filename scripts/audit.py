@@ -10,6 +10,7 @@ because a backslash in a generated file is how the last two bugs got in.
 from __future__ import annotations
 
 import ast
+import builtins
 import re
 import sys
 from pathlib import Path
@@ -213,6 +214,73 @@ def config_drift() -> list[str]:
         findings.append(f"code reads {key!r} but config.yaml does not set it")
     return findings
 
+def bound_anywhere(tree) -> set:
+    """Every name the module binds, at any scope.
+
+    Deliberately over-generous. This feeds a check that reports a problem,
+    so it must not invent one: counting a name as bound when it is only
+    bound in some other function costs a missed bug, while the reverse costs
+    a false alarm on working code, and false alarms are what get a checker
+    switched off.
+    """
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names:
+                names.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(node.name)
+            args = node.args
+            for group in (args.posonlyargs, args.args, args.kwonlyargs):
+                names.update(a.arg for a in group)
+            if args.vararg:
+                names.add(args.vararg.arg)
+            if args.kwarg:
+                names.add(args.kwarg.arg)
+        elif isinstance(node, ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        elif isinstance(node, (ast.Global, ast.Nonlocal)):
+            names.update(node.names)
+        elif isinstance(node, ast.Lambda):
+            names.update(a.arg for a in node.args.args)
+    return names
+
+
+def undefined_names() -> list[str]:
+    """Modules used as x.y where x is never bound in the file.
+
+    Rewriting an import block dropped `quiet` from main.py while leaving
+    quiet.configure() six lines below it. Everything still compiled and
+    still imported, because a NameError only happens when the line runs --
+    so the gate passed and the application failed on boot.
+    """
+    findings = []
+    for path in SRC:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        bound = bound_anywhere(tree) | set(dir(builtins))
+        seen = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Attribute):
+                continue
+            base = node.value
+            if not isinstance(base, ast.Name) or not isinstance(base.ctx, ast.Load):
+                continue
+            if base.id in bound or base.id in seen:
+                continue
+            seen.add(base.id)
+            findings.append(
+                f"{path.relative_to(ROOT)}:{base.lineno}  "
+                f"{base.id!r} is used but never imported or defined")
+    return findings
+
+
 def is_create_task(node) -> bool:
     if not isinstance(node, ast.Call):
         return False
@@ -260,6 +328,7 @@ def main() -> int:
         ("DEAD DEFINITIONS", dead_definitions()),
         ("CONFIG DRIFT", config_drift()),
         ("UNANCHORED TASKS", unanchored_tasks()),
+        ("UNDEFINED NAMES", undefined_names()),
     ]
     total = 0
     for title, findings in sections:
