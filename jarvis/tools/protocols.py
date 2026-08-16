@@ -234,3 +234,62 @@ def delete_protocol(name: str) -> str:
             _save(data)
             return f"Deleted the {key} protocol."
     return f"I have no protocol called {name}."
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Running them on their own
+# ══════════════════════════════════════════════════════════════════
+@tool(category="protocols")
+def schedule_protocol(name: str, at: str, days: str = "daily") -> str:
+    """Run a protocol automatically at a time.
+
+    Use for "every weekday at eight run work mode", "run good night at
+    eleven every day".
+
+    Args:
+        name: Which protocol.
+        at: The time, e.g. "8", "8:30am", "17:00".
+        days: "daily", "weekdays", "weekends", or a day name.
+    """
+    from .. import schedules
+
+    if not _find(name):
+        known = ", ".join(_load()) or "none"
+        return f"I have no protocol called {name}. I know: {known}."
+
+    when = schedules.parse_time(at)
+    if not when:
+        return f"I could not read {at} as a time."
+
+    key = _find(name)[0]
+    entry = schedules.add(key, when[0], when[1],
+                          schedules.parse_days(days), days.lower().strip())
+    return f"I'll run {schedules.spoken(entry)}."
+
+
+@tool(category="protocols")
+def list_schedules() -> str:
+    """List the protocols set to run automatically."""
+    from .. import schedules
+
+    entries = schedules.all_schedules()
+    if not entries:
+        return "Nothing is scheduled."
+    return "I run " + ", and ".join(schedules.spoken(e) for e in entries) + "."
+
+
+@tool(category="protocols")
+def cancel_schedule(name: str = "") -> str:
+    """Stop running a protocol automatically.
+
+    Args:
+        name: Which one. Leave empty to clear every schedule.
+    """
+    from .. import schedules
+
+    dropped = schedules.cancel(name)
+    if not dropped:
+        return "That was not scheduled."
+    if len(dropped) == 1:
+        return f"No longer running {dropped[0]['protocol']} automatically."
+    return f"Cleared {len(dropped)} schedules."

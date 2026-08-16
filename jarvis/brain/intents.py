@@ -310,6 +310,10 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?snooze\s+(?:that|it)\s*[.!]?$",
            "snooze_observation"),
 
+    Intent(r"^(?:jarvis[,\s]+)?what(?:'s| is)\s+scheduled\s*[.?!]?$",
+           "list_schedules"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:list|show)\s+(?:my\s+)?schedules\s*[.?!]?$", "list_schedules"),
+
     # ══ named protocols ══
     # "JARVIS, initiate the House Party protocol." The guard is what makes the
     # looser phrasings safe: "work mode" and "engage focus" only route here

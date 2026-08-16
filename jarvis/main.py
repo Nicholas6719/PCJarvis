@@ -33,7 +33,7 @@ from jarvis.brain import persona  # noqa: E402
 from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
-from jarvis import briefing, history, quiet, standing  # noqa: E402
+from jarvis import briefing, history, quiet, schedules, standing  # noqa: E402
 from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
@@ -176,6 +176,7 @@ class Jarvis:
                         self.cfg.get("watch.quiet_expire_hours", 12))
         standing.configure(DATA_DIR)   # things he was asked to watch for
         history.configure(DATA_DIR)    # readings, so trends are answerable
+        schedules.configure(DATA_DIR)  # protocols that run on their own
 
         state = health.startup_check()
         if state.get("orphans_killed"):

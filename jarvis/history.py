@@ -193,16 +193,6 @@ def app_summary(hours: float = 8.0, limit: int = 4) -> str:
     return f"Mostly {line}."
 
 
-def busiest_app(hours: float = 8.0) -> str:
-    if _db is None:
-        return ""
-    row = _db.execute(
-        "SELECT app, COUNT(*) n FROM context WHERE at >= ? "
-        "GROUP BY app ORDER BY n DESC LIMIT 1",
-        (time.time() - hours * 3600,)).fetchone()
-    return row["app"] if row and row["n"] >= 5 else ""
-
-
 def _window(field: str, start: float, end: float) -> dict | None:
     if _db is None:
         return None

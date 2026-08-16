@@ -83,9 +83,3 @@ def compose(cfg, last_seen: float) -> str:
     except Exception:
         log.debug("could not compose a briefing", exc_info=True)
         return ""
-
-
-def what_was_i_doing(hours: float = 8.0) -> str:
-    from . import history
-
-    return history.app_summary(hours)

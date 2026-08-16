@@ -125,6 +125,11 @@ EXTRAS: dict[str, set[str]] = {
     "list_watches":        {"what are you watching", "watching for"},
     "cancel_watch":        {"stop watching", "cancel watching"},
 
+    "schedule_protocol":   {"every day at", "every weekday", "every morning",
+                            "schedule", "automatically at", "every night"},
+    "list_schedules":      {"what is scheduled", "what do you run"},
+    "cancel_schedule":     {"stop running", "unschedule"},
+
     # -- holding his tongue --
     "begin_quiet_hours":   {"quiet hours", "goodnight", "good night"},
     "end_quiet_hours":     {"good morning", "get to work", "i am back"},

@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import history, quiet, standing
+from . import history, quiet, schedules, standing
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -66,6 +66,7 @@ class Watcher:
         self._known_downloads: set[str] = set()
         self._downloads_primed = False
         self._arrived: list[str] = []
+        self._due_protocols: list[str] = []
         self._running = False
         self._stop = None          # asyncio.Event, made inside the loop
         self._loop = None
@@ -304,6 +305,14 @@ class Watcher:
         # was asked: a requested report is not the same as an unsolicited
         # remark, and silencing it during quiet hours would mean the answer to
         # "tell me when the build is done" is sometimes no.
+        # Protocols whose moment has come. Run rather than announced -- the
+        # point of scheduling one is that it happens without being discussed.
+        try:
+            for name in schedules.due():
+                self._due_protocols.append(name)
+        except Exception:
+            log.debug("scheduled protocols failed", exc_info=True)
+
         try:
             for sentence in standing.check(self._arrived):
                 found.append(Observation(f"standing:{sentence[:24]}", sentence,
@@ -382,6 +391,16 @@ class Watcher:
 
         while self._running:
             try:
+                for name in self._due_protocols:
+                    log.info("running scheduled protocol: %s", name)
+                    try:
+                        from .tools.protocols import run_protocol
+
+                        await run_protocol(name)
+                    except Exception:
+                        log.exception("scheduled protocol %s failed", name)
+                self._due_protocols.clear()
+
                 for obs in self._collect():
                     if not self._may_speak(obs):
                         log.debug("held back while dismissed: %s", obs.id)
