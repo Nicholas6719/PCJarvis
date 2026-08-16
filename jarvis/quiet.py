@@ -102,11 +102,6 @@ def active() -> bool:
     return True
 
 
-def since_hours() -> float:
-    if not active():
-        return 0.0
-    return (time.time() - _state["quiet_since"]) / 3600
-
 
 # ── snoozing one observation ───────────────────────────────────────
 def snooze(observation_id: str, hours: float = 8.0) -> None:
@@ -134,9 +129,6 @@ def clear_snoozes() -> int:
     _save()
     return n
 
-
-def snoozed_ids() -> list[str]:
-    return [k for k in _state.get("snoozed", {}) if snoozed(k)]
 
 
 # ── what he last said unprompted ───────────────────────────────────
