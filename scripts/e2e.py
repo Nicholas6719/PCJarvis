@@ -192,6 +192,49 @@ async def turn(app, rec: Recorder, text: str) -> tuple[str, list[str], float]:
 # ══════════════════════════════════════════════════════════════════
 #  Tests
 # ══════════════════════════════════════════════════════════════════
+async def test_ambient_watch(app, rec) -> None:
+    """Does an unprompted observation actually reach his voice?
+
+    The unit tests cover restraint. This covers the wiring: an observation
+    raised by the watcher has to travel the bus, survive the governing rules
+    and come out of his mouth. That path is exactly where the timer failed
+    three times, so it is worth asserting end to end rather than assuming.
+    """
+    print("\n[watch] an unprompted remark, end to end")
+
+    from types import SimpleNamespace
+
+    import psutil
+
+    from jarvis.watch import Watcher
+
+    spoken: list[str] = []
+    BUS.on("proactive.spoken", lambda ev: spoken.append(ev.get("text", "")))
+
+    watcher = Watcher(app.cfg, state_getter=lambda: app.state)
+
+    real_battery = psutil.sensors_battery
+    psutil.sensors_battery = lambda: SimpleNamespace(
+        percent=9, power_plugged=False, secsleft=600)
+    try:
+        found = watcher._check_power()
+        check("noticed the battery", bool(found),
+              found[0].text if found else "nothing")
+        check("treated it as urgent", bool(found) and found[0].critical)
+
+        for obs in found:
+            await BUS.emit("proactive", text=obs.text, source="watch")
+
+        for _ in range(80):
+            await asyncio.sleep(0.1)
+            if spoken:
+                break
+        check("HE SAID IT UNPROMPTED", bool(spoken),
+              spoken[0][:60] if spoken else "silence")
+    finally:
+        psutil.sensors_battery = real_battery
+
+
 async def test_timer_end_to_end(app, rec) -> None:
     """The one that has failed three times. Does it actually go off?"""
     print("\n[timers] end to end, in the real application")
@@ -417,6 +460,7 @@ async def main() -> int:
         await test_deterministic_speed(app, rec)
         await test_accuracy(app, rec)
         await test_conversation_state(app, rec)
+        await test_ambient_watch(app, rec)
         await test_dismiss_and_shutdown(app, rec)
         await test_documents(app, rec)
         if not args.fast:

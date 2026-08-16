@@ -115,44 +115,103 @@ def dead_definitions() -> list[str]:
     return findings
 
 
+def declared_keys(text: str) -> set[str]:
+    """Every settable key in the YAML, as a dotted path.
+
+    Indentation-aware, because voice_chain.room.mix is three levels deep and
+    a parser that only understood two reported it as never declared.
+    A key counts as settable when it carries a value inline, or when its
+    children are list items -- file_search_roots is a list and is read by
+    its own name.
+    """
+    lines = []
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        m = re.match(r"^(\s*)([a-z_][a-z0-9_]*):(.*)$", raw)
+        if m:
+            lines.append((len(m.group(1)), m.group(2),
+                          m.group(3).split("#")[0].strip(), False))
+        elif raw.lstrip().startswith("-"):
+            lines.append((len(raw) - len(raw.lstrip()), "", "", True))
+
+    declared: set[str] = set()
+    stack: list[tuple[int, str]] = []
+    for i, (indent, key, value, is_item) in enumerate(lines):
+        if is_item:
+            continue
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        path = ".".join([k for _, k in stack] + [key])
+
+        follows_a_list = (i + 1 < len(lines) and lines[i + 1][3]
+                          and lines[i + 1][0] > indent)
+        if value or follows_a_list:
+            declared.add(path)
+        stack.append((indent, key))
+    return declared
+
+
+def read_keys() -> tuple[set[str], set[str]]:
+    """Config keys the code actually reads, found through the AST.
+
+    Regex found this text inside a docstring in config.py --
+    "Dotted-path access over the YAML tree: cfg.get(...)" -- and reported the
+    key as live when nothing read it at all. Parsing the tree instead means
+    comments and examples cannot be mistaken for code.
+    """
+    keys: set[str] = set()
+    sections: set[str] = set()
+    for path in SRC:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            if not isinstance(fn, ast.Attribute) or not node.args:
+                continue
+            first = node.args[0]
+            if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+                continue
+
+            # The receiver has to look like config. Without this, every
+            # httpx client.get("https://...") counted as reading a setting,
+            # because a URL contains dots too.
+            recv = fn.value
+            if isinstance(recv, ast.Name):
+                recv_name = recv.id
+            elif isinstance(recv, ast.Attribute):
+                recv_name = recv.attr
+            else:
+                recv_name = ""
+            if recv_name not in ("cfg", "CONFIG", "config", "_cfg"):
+                continue
+
+            if fn.attr == "get" and "." in first.value:
+                keys.add(first.value)
+            elif fn.attr == "section":
+                sections.add(first.value)
+    return keys, sections
+
+
 def config_drift() -> list[str]:
     cfg = ROOT / "config.yaml"
     if not cfg.exists():
         return ["config.yaml missing"]
 
-    text = cfg.read_text(encoding="utf-8")
-    declared, section = set(), ""
-    for line in text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        if re.match(r"^[a-z_]+:", line):
-            section = line.split(":")[0].strip()
-        m = re.match(r"^\s{2}([a-z_]+):", line)
-        if m and section:
-            declared.add(f"{section}.{m.group(1)}")
-
-    code = chr(10).join(p.read_text(encoding="utf-8") for p in SRC)
-
-    # Config is reached two ways, and an audit that knew only the first
-    # reported 53 live settings as dead. Most modules take an injected Config
-    # and call cfg.get("vad.threshold", ...); only a few use the CONFIG
-    # singleton. Match any receiver. A .section("vad") call reads the whole
-    # section at once, so every key under it counts as read.
-    # Character classes throughout instead of the usual escapes -- a stray
-    # backslash in a generated file is how the last two bugs got in.
-    read = set(re.findall(
-        '[A-Za-z_][A-Za-z0-9_]*[.]get[(][ ]*"([a-z_]+[.][a-z_.]+)"', code))
-    whole_sections = set(re.findall(
-        '[.]section[(][ ]*"([a-z_]+)"', code))
+    declared = declared_keys(cfg.read_text(encoding="utf-8"))
+    read, whole_sections = read_keys()
     read |= {k for k in declared if k.split(".")[0] in whole_sections}
 
     findings = []
     for key in sorted(declared - read):
-        findings.append(f"config.yaml declares '{key}' but nothing reads it")
+        findings.append(f"config.yaml declares {key!r} but nothing reads it")
     for key in sorted(read - declared):
-        findings.append(f"code reads '{key}' but config.yaml does not set it")
+        findings.append(f"code reads {key!r} but config.yaml does not set it")
     return findings
-
 
 def is_create_task(node) -> bool:
     if not isinstance(node, ast.Call):

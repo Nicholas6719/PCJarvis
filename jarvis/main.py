@@ -38,6 +38,7 @@ from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
 from jarvis.tools import documents, memory_tools, registry  # noqa: E402
 from jarvis.tools import text as text_tools  # noqa: E402
+from jarvis.watch import Watcher  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
 from jarvis.voice.tts import Voice, make_chime  # noqa: E402
 
@@ -225,6 +226,10 @@ class Jarvis:
         self.listener = Listener(self.cfg, self.mic, stt)
         self._chime = make_chime(self.voice.sample_rate)
 
+        # The part of him that speaks first. It only observes here;
+        # nothing is said until run() starts its loop.
+        self.watcher = Watcher(self.cfg, state_getter=lambda: self.state)
+
         self.mic.start()
         self.player.start()
 
@@ -294,6 +299,12 @@ class Jarvis:
     async def handle(self, text: str) -> None:
         """One user utterance, from transcript to spoken reply."""
         assert self.brain is not None and self.listener is not None
+
+        # Only the long-session observation uses this: it will not
+        # remark on how long he has been at the desk if he walked away
+        # from it half an hour ago.
+        if getattr(self, "watcher", None):
+            self.watcher.note_activity()
 
         self._interrupted = False
         # Hold the window open for the whole turn. Without this a slow reply
@@ -490,6 +501,10 @@ class Jarvis:
         BUS.on("conversation.ended", lambda _: _spawn(
             self._on_conversation_ended()))
 
+
+        if self.cfg.get("watch.enabled", True):
+            _spawn(self.watcher.run())
+
         listen_task = asyncio.create_task(self.listener.run())
         listen_task.add_done_callback(self._listener_died)
 
@@ -541,6 +556,9 @@ class Jarvis:
         self._shut_down = True
         self.running = False
         log.info("shutting down")
+
+        if getattr(self, 'watcher', None):
+            self.watcher.stop()
 
         if self.speaker:
             self.speaker.shutdown()

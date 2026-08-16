@@ -129,6 +129,22 @@ tools:
     - downloads
     - pictures            # screenshots land here by default
 
+# Speaking unprompted. Thresholds are deliberately high: an assistant that
+# comments on everything gets tuned out, and then the remark that mattered
+# is missed too. Each observation fires when a threshold is crossed, not
+# while it is exceeded, and re-arms only after the condition clears.
+watch:
+  enabled: true
+  interval_s: 60           # how often he looks; nothing is said most times
+  battery_low: 20          # percent, on battery only
+  battery_critical: 10     # this one speaks even after you have dismissed him
+  disk_full_percent: 92
+  memory_pressure_percent: 92
+  cpu_busy_percent: 85     # sustained, not a spike
+  cpu_busy_minutes: 5
+  long_session_hours: 3    # 0 disables the observation entirely
+  downloads: true          # mention a file that has finished arriving
+
 ui:
   width: 1100
   height: 720
