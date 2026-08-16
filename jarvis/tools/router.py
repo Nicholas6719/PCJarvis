@@ -109,6 +109,14 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    # -- named routines, the House Party pattern --
+    "run_protocol":        {"protocol", "initiate", "engage", "mode"},
+    "list_protocols":      {"protocols", "what protocols", "my routines"},
+    "create_protocol":     {"create a protocol", "new protocol",
+                            "define a protocol", "make a protocol"},
+    "delete_protocol":     {"delete the protocol", "remove the protocol",
+                            "forget the protocol"},
+
     # -- what is on screen, read from the window title --
     "current_page":        {"what page", "what site", "what website",
                             "what am i looking at", "this page",

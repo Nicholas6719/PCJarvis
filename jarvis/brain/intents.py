@@ -66,6 +66,22 @@ def _timer_guard(m: re.Match) -> bool:
     return bool(parse_duration(m.group("dur").strip(" ,.")))
 
 
+def _protocol_exists(name: str) -> bool:
+    """Only claim phrases like "work mode" when that protocol is real.
+
+    Without this the pattern would swallow anything shaped like a couple of
+    words -- "aeroplane mode", "engage warp drive" -- and answer with a dead
+    end instead of letting the model deal with it. Imported here rather than
+    at module scope because the tools package imports this one.
+    """
+    try:
+        from ..tools.protocols import exists
+
+        return exists(name)
+    except Exception:
+        return False
+
+
 def _component(name: str) -> Callable:
     return lambda m: {"component": name}
 
@@ -183,6 +199,26 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:make\s+a\s+note|note)(?:\s+that)?\s+(?P<text>.+)$",
            "add_note", lambda m: {"text": m.group("text").strip()}),
     Intent(r"^(?:jarvis[,\s]+)?(?:read|what\s+are)\s+my\s+notes\s*[.?!]?$", "read_notes"),
+
+    # ══ named protocols ══
+    # "JARVIS, initiate the House Party protocol." The guard is what makes the
+    # looser phrasings safe: "work mode" and "engage focus" only route here
+    # when a protocol by that name actually exists, so an undefined phrase
+    # falls through to the model instead of being swallowed by a dead end.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?"
+           r"(?:initiate|activate|engage|run|start|begin|execute)\s+"
+           r"(?:the\s+)?(?P<name>[a-z][a-z ]*?)"
+           r"(?:\s+protocol|\s+routine|\s+mode)?\s*[.!]?$",
+           "run_protocol", lambda m: {"name": m.group("name").strip()},
+           guard=lambda m: _protocol_exists(m.group("name"))),
+    Intent(r"^(?:jarvis[,\s]+)?(?:the\s+)?(?P<name>[a-z][a-z ]*?)\s+(?:protocol|mode)\s*[.!]?$",
+           "run_protocol", lambda m: {"name": m.group("name").strip()},
+           guard=lambda m: _protocol_exists(m.group("name"))),
+    Intent(r"^(?:jarvis[,\s]+)?(?:what|which)\s+protocols?\s+"
+           r"(?:do\s+i\s+have|are\s+there|do\s+you\s+know)\s*[.?!]?$",
+           "list_protocols"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:list|show)\s+(?:my\s+)?protocols\s*[.?!]?$",
+           "list_protocols"),
 
     # ══ working on what he has copied ══
     # "this" means the clipboard. The tool still calls the model to do the
