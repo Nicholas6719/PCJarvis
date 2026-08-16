@@ -128,6 +128,43 @@ He also mentions things before doing what you asked — a timer still running
 when you shut down, unsaved work in an editor. He says it once and then does
 as he was told.
 
+### Reading the screen
+**"what does this say?"** · **"read me that error"** · **"summarise this
+page"** · **"can you see the submit button?"**
+
+He reads the text on screen using the OCR engine built into Windows — no
+extra model, no memory cost. Reads the window in front by default, since
+reading the whole desktop returns the taskbar and every background window
+jumbled together. He reads text; he cannot describe pictures.
+
+### Your own documents
+**"what did I write about the router?"** · **"find my notes on the project"**
+
+Searches the text inside your documents by meaning rather than filename. If
+nothing genuinely matches he says so instead of returning the closest thing.
+
+### Scheduled protocols
+**"every weekday at 8 run work mode"** · **"what's scheduled?"** ·
+**"stop running work mode"**
+
+If he was closed at the scheduled time he runs it only within half an hour of
+it — a morning routine firing at half past ten is startling rather than
+helpful.
+
+### What you have been doing
+**"what have I been working on?"** · **"what did I miss?"** ·
+**"where has my day gone?"**
+
+He samples which application is in front once a minute. **The application
+only — never window titles**, which carry email subjects, document names and
+page URLs.
+
+He also reports on arrival if you have been gone more than 90 minutes, using
+anything he noticed while quiet. Under that he just says good evening.
+
+Occasionally — rarely — he will notice you do the same thing most mornings
+and offer to make it a protocol. He asks once and never raises it again.
+
 ### Asking him to watch for something
 **"tell me when the download finishes"** · **"tell me when it's charged"** ·
 **"tell me when the battery hits 80"** · **"let me know when handbrake
