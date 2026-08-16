@@ -14,6 +14,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from pathlib import Path
+
+from . import vault
 import time
 
 import numpy as np
@@ -83,7 +86,84 @@ class Memory:
         self._embedder = None
         if cfg.get("memory.semantic", True):
             self._load_embedder()
-        log.info("memory ready: %s (%d facts)", path.name, self.count())
+
+        # The facts themselves live as markdown, one file each, so they can
+        # be read and corrected without a database client. This table is the
+        # index over them -- the embeddings that make recall semantic rather
+        # than literal. The files win every disagreement.
+        self.vault = Path(cfg.get(
+            "memory.vault_path",
+            str(Path.home() / "Documents" / "JARVIS" / "Memory")))
+        # None, not (): an empty tuple is what a folder that does not
+        # exist yet fingerprints as, so starting there made the very
+        # first sync decide nothing had changed and skip the migration.
+        self._vault_seen: tuple | None = None
+        self._synced_at = 0.0
+        self._sync_vault()
+
+        log.info("memory ready: %d facts in %s", self.count(), self.vault)
+
+    # ── the vault ──────────────────────────────────────────────────
+    def _sync_vault(self, force: bool = False) -> None:
+        """Make the index match the files.
+
+        Called before every recall, so it has to cost nothing when nothing
+        has changed: the fingerprint is names and modification times only,
+        and no file is opened unless one of them moved. Re-embedding is the
+        expensive part, so a fact whose text is unchanged keeps its vector.
+        """
+        try:
+            # No time-based throttle. The fingerprint is the guard and it is
+            # already cheap -- a glob and a stat, nothing opened -- whereas a
+            # two-second window meant an edit made just before a question was
+            # not seen, which is the one moment it matters.
+            self._synced_at = time.time()
+
+            seen = vault.fingerprint(self.vault)
+            if seen == self._vault_seen and not force:
+                return
+            self._vault_seen = seen
+
+            facts = vault.scan(self.vault)
+            if not facts and not self.vault.is_dir():
+                self._migrate_into_vault()
+                facts = vault.scan(self.vault)
+                self._vault_seen = vault.fingerprint(self.vault)
+
+            wanted = {f["content"]: f for f in facts}
+            with self._lock:
+                have = {r["content"]: r["id"] for r in self.db.execute(
+                    "SELECT id, content FROM facts").fetchall()}
+
+                for content, fact in wanted.items():
+                    if content in have:
+                        continue
+                    vector = self._embed(content)
+                    now = time.time()
+                    self.db.execute(
+                        "INSERT INTO facts (content, category, created_at, "
+                        "updated_at, embedding) VALUES (?,?,?,?,?)",
+                        (content, fact["category"], now, now,
+                         vector.tobytes() if vector is not None else None))
+
+                # A file he deleted is a fact he wants forgotten.
+                for content, row_id in have.items():
+                    if content not in wanted:
+                        self.db.execute("DELETE FROM facts WHERE id=?", (row_id,))
+                self.db.commit()
+        except Exception:
+            log.exception("could not sync the memory vault; using the index")
+
+    def _migrate_into_vault(self) -> None:
+        """First run: write out whatever the database already held."""
+        rows = self.db.execute(
+            "SELECT content, category FROM facts").fetchall()
+        self.vault.mkdir(parents=True, exist_ok=True)
+        (self.vault / "README.md").write_text(vault.README, encoding="utf-8")
+        for row in rows:
+            vault.write(self.vault, row["content"], row["category"])
+        if rows:
+            log.info("moved %d remembered facts into %s", len(rows), self.vault)
 
     # ── embeddings ─────────────────────────────────────────────────
     def _load_embedder(self) -> None:
@@ -138,6 +218,13 @@ class Memory:
                 (content, category, now, now, blob),
             )
             self.db.commit()
+
+        # The file is the fact; the row above is only how it is found quickly.
+        try:
+            vault.write(self.vault, content, category)
+            self._vault_seen = vault.fingerprint(self.vault)
+        except Exception:
+            log.exception("remembered it, but could not write the vault file")
         return "Noted."
 
     def log_turn(self, role: str, content: str) -> None:
@@ -155,6 +242,16 @@ class Memory:
         with self._lock:
             self.db.execute("DELETE FROM facts WHERE id=?", (matches[0]["id"],))
             self.db.commit()
+
+        # Remove the file as well, or the next sync would read it back in and
+        # he would remember the thing he was just told to forget.
+        try:
+            for fact in vault.scan(self.vault):
+                if fact["content"] == matches[0]["content"]:
+                    Path(fact["path"]).unlink(missing_ok=True)
+            self._vault_seen = vault.fingerprint(self.vault)
+        except Exception:
+            log.exception("forgot it, but could not remove the vault file")
         return f"Forgotten: {matches[0]['content'][:80]}"
 
     # ── reading ────────────────────────────────────────────────────
@@ -178,6 +275,10 @@ class Memory:
         return dict(best) if best and best_score >= threshold else None
 
     def search(self, query: str, limit: int | None = None) -> list[dict]:
+        # The folder is the truth, so read it before answering from the
+        # index. Without this, a fact corrected in Obsidian stayed corrected
+        # only until someone restarted him.
+        self._sync_vault()
         """Hybrid recall: keyword matches merged with semantic neighbours."""
         limit = limit or self.recall_limit
         results: dict[int, dict] = {}
@@ -233,6 +334,9 @@ class Memory:
         return "\n".join(f"- {m['content']}" for m in matches)
 
     def count(self) -> int:
+        # Sync first, or this reports what the index last believed rather
+        # than what is in the folder now.
+        self._sync_vault()
         return self.db.execute("SELECT COUNT(*) c FROM facts").fetchone()["c"]
 
     def recent_turns(self, limit: int = 20) -> list[dict]:

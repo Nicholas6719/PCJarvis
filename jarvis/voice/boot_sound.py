@@ -31,8 +31,16 @@ from scipy import signal as _sig
 
 log = logging.getLogger("jarvis.boot_sound")
 
-DURATION = 2.6          # seconds; boot itself is about four
-RESOLVE_AT = 1.80       # when the fifth lands
+# Halfway between the two he picked: the balanced one carried the weight,
+# the bright one had the urgency. Blended by parameter rather than by summing
+# the two renders -- two sweeps resolving 350ms apart smear into each other
+# instead of combining, and you lose the single clean landing that makes the
+# whole thing read as "online".
+DURATION = 2.40         # between 2.6 and 2.2
+RESOLVE_AT = 1.62       # between 1.80 and 1.45
+WEIGHT = 0.85           # between 1.0 and 0.7 -- keeps some of the sub
+AIR = 1.35              # between 1.0 and 1.7 -- keeps most of the shimmer
+TOP = 385.0             # between 330 and 440 Hz
 PEAK = 0.34             # never startling, never buried
 
 
@@ -48,8 +56,8 @@ def _fade(n: int, samples: int) -> np.ndarray:
 
 
 def make_boot_sound(sample_rate: int = 24000, duration: float = DURATION,
-                    resolve_at: float = RESOLVE_AT, weight: float = 1.0,
-                    air: float = 1.0, top: float = 330.0) -> np.ndarray:
+                    resolve_at: float = RESOLVE_AT, weight: float = WEIGHT,
+                    air: float = AIR, top: float = TOP) -> np.ndarray:
     """The power-up. Deterministic, so every launch sounds identical.
 
     Args:

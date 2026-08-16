@@ -119,6 +119,9 @@ memory:
   embed_model: BAAI/bge-small-en-v1.5
   recall_limit: 5           # memories returned per recall
   min_similarity: 0.58      # below this it is not a match (see memory.py)
+  vault_path: C:/Users/nicho/Documents/JARVIS/Memory
+                            # facts as markdown, one file each. Open it
+                            # as an Obsidian vault, or just read it.
 
 tools:
   confirm_destructive: true # shutdown / shell / delete need a spoken yes
