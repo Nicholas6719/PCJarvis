@@ -286,3 +286,62 @@ def get_time_until(event_time: str) -> str:
     if hours:
         return f"{hours} hour{'s' if hours != 1 else ''} and {minutes} minutes."
     return f"{minutes} minutes."
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Holding his tongue
+# ══════════════════════════════════════════════════════════════════
+@tool(category="quiet")
+def begin_quiet_hours() -> str:
+    """Stop volunteering things until told otherwise. Use for "goodnight"."""
+    from .. import quiet
+
+    # Deliberately silent, both ways. He never wants to hear about quiet
+    # hours -- being told "quiet hours are now on" is itself the interruption
+    # the feature exists to prevent, and saying goodnight to something that
+    # answers back rather defeats the point.
+    quiet.begin()
+    return ""
+
+
+@tool(category="quiet")
+def end_quiet_hours() -> str:
+    """Resume speaking up. Use for "good morning" or "let's get to work"."""
+    from .. import quiet
+
+    if not quiet.end():
+        # Only reachable through the model: the intent is guarded on quiet
+        # hours actually running. Nothing to end, so this is just a greeting,
+        # and greeting him back is the right answer.
+        return "Good morning, sir."
+    return ""
+
+
+@tool(category="quiet")
+def snooze_observation(hours: float = 8.0) -> str:
+    """Stop mentioning the thing just mentioned, for a while.
+
+    Use for "stop telling me about that" or "don't mention that again".
+
+    Args:
+        hours: How long to leave it alone.
+    """
+    from .. import quiet
+
+    last = quiet.last_spoken()
+    if not last:
+        return "I have not mentioned anything unprompted yet."
+    quiet.snooze(last, hours)
+    subject = last.replace("_", " ")
+    return f"I shall say nothing further about {subject}."
+
+
+@tool(category="quiet")
+def clear_snoozes() -> str:
+    """Undo every snooze, so he mentions those things again."""
+    from .. import quiet
+
+    n = quiet.clear_snoozes()
+    if not n:
+        return "Nothing was snoozed."
+    return f"I will mention {n} thing(s) again."

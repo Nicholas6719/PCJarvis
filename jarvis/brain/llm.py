@@ -363,7 +363,11 @@ class Brain:
                 self.history.append({"role": "assistant", "content": reply})
                 self._trim()
                 log.info("intent shortcut answered in one step: %s", name)
-                yield Event("sentence", text=reply)
+                # A tool may deliberately return nothing -- entering quiet
+                # hours is meant to be silent -- and an empty sentence event
+                # still lights the interface up and pushes an empty bubble.
+                if reply.strip():
+                    yield Event("sentence", text=reply)
                 yield Event("done", text=reply)
                 return
 

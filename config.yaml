@@ -148,6 +148,9 @@ watch:
   cpu_busy_minutes: 5
   long_session_hours: 3    # 0 disables the observation entirely
   downloads: true          # mention a file that has finished arriving
+  quiet_expire_hours: 12   # goodnight lapses on its own after this, so
+                           # forgetting to say good morning does not
+                           # mute him permanently
 
 ui:
   width: 1100

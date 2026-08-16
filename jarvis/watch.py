@@ -32,6 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import quiet
 from .bus import BUS
 
 log = logging.getLogger("jarvis.watch")
@@ -295,8 +296,22 @@ class Watcher:
         return found
 
     def _may_speak(self, obs: Observation) -> bool:
-        """He has dismissed JARVIS. Only the urgent gets through."""
-        if obs.critical or self._state_getter is None:
+        """Three reasons to stay silent, in order of how specific they are.
+
+        A snoozed observation is silenced outright, urgent or not: he asked
+        for that one to stop and being overruled by the thing he just
+        muted is worse than missing it. Quiet hours and a dismissed JARVIS
+        both hold back the ordinary and let the urgent through -- a battery
+        about to die at three in the morning is worth the interruption, a
+        disk at 93% is not.
+        """
+        if quiet.snoozed(obs.id):
+            return False
+        if obs.critical:
+            return True
+        if quiet.active():
+            return False
+        if self._state_getter is None:
             return True
         try:
             return getattr(self._state_getter(), "value", "") != "sleeping"
@@ -338,6 +353,7 @@ class Watcher:
                         log.debug("held back while dismissed: %s", obs.id)
                         continue
                     log.info("observation: %s", obs.text)
+                    quiet.note_spoken(obs.id)
                     await BUS.emit("proactive", text=obs.text, source="watch")
             except asyncio.CancelledError:
                 raise

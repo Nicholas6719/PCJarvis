@@ -109,6 +109,12 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    # -- holding his tongue --
+    "begin_quiet_hours":   {"quiet hours", "goodnight", "good night"},
+    "end_quiet_hours":     {"good morning", "get to work", "i am back"},
+    "snooze_observation":  {"stop telling me", "snooze", "mention that"},
+    "clear_snoozes":       {"unsnooze", "clear snoozes"},
+
     # -- named routines, the House Party pattern --
     "run_protocol":        {"protocol", "initiate", "engage", "mode"},
     "list_protocols":      {"protocols", "what protocols", "my routines"},

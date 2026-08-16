@@ -82,6 +82,21 @@ def _timer_pending(m: "re.Match") -> bool:
         return False
 
 
+def _quiet_active(m: "re.Match") -> bool:
+    """Only treat a greeting as "end quiet hours" if they are running.
+
+    Otherwise "good morning" to a JARVIS who was never quiet gets answered
+    with "I was not being quiet", which is a strange thing to say to someone
+    saying good morning. Unguarded it falls through and he simply greets back.
+    """
+    try:
+        from .. import quiet
+
+        return quiet.active()
+    except Exception:
+        return False
+
+
 def _tomorrow_args(m: "re.Match") -> dict:
     from ..tools.web import last_weather_place
 
@@ -239,6 +254,28 @@ INTENTS: list[Intent] = [
            "get_weather", lambda m: {"when": "tomorrow"}),
     Intent(r"^(?:jarvis[,\s]+)?(?:and|what\s+about|how\s+about)\s+tomorrow\s*[.?!]?$",
            "get_weather", _tomorrow_args, guard=_weather_recent),
+
+    # ══ quiet hours ══
+    # Goodnight puts him away; the morning brings him back. Both are things
+    # said in passing rather than commands, so the phrasings are generous.
+    Intent(r"^(?:jarvis[,\s]+)?(?:good\s*night|goodnight|night)(?:[,\s]+jarvis)?\s*[.!]?$",
+           "begin_quiet_hours"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:that is|that's)\s+it\s+for\s+(?:today|tonight|the\s+night)\s*[.!]?$",
+           "begin_quiet_hours"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:good\s*morning|morning)(?:[,\s]+jarvis)?\s*[.!]?$",
+           "end_quiet_hours", guard=_quiet_active),
+    Intent(r"^(?:jarvis[,\s]+)?(?:let's|lets)\s+get\s+(?:to\s+work|started|going)\s*[.!]?$",
+           "end_quiet_hours", guard=_quiet_active),
+    Intent(r"^(?:jarvis[,\s]+)?(?:i'm|i am)\s+back\s*[.!]?$",
+           "end_quiet_hours", guard=_quiet_active),
+
+    # ══ snoozing one thing he keeps mentioning ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:stop|quit)\s+(?:telling|reminding|mentioning)\s+(?:me\s+)?(?:about\s+)?that\s*[.!]?$",
+           "snooze_observation"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:don't|do not|dont)\s+(?:tell|mention|remind)\s+(?:me\s+)?(?:about\s+)?that\s+again\s*[.!]?$",
+           "snooze_observation"),
+    Intent(r"^(?:jarvis[,\s]+)?snooze\s+(?:that|it)\s*[.!]?$",
+           "snooze_observation"),
 
     # ══ named protocols ══
     # "JARVIS, initiate the House Party protocol." The guard is what makes the

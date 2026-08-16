@@ -196,6 +196,48 @@ check("the long-session remark can be disabled",
       ids(w._check_session()) == [])
 
 
+# -- quiet hours and snoozing --------------------------------------
+print("\n[quiet] goodnight silences the ordinary, never the urgent")
+
+import shutil as _shutil  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+from jarvis import quiet  # noqa: E402
+
+_qtmp = Path(_tempfile.mkdtemp(prefix="jarvis_quiet_"))
+quiet.configure(_qtmp, expire_hours=12)
+
+w = Watcher(Cfg(), state_getter=lambda: listening)
+ordinary = Observation("disk_full", "The disk is nearly full.")
+urgent = Observation("battery_critical", "Battery is at 9%.", critical=True)
+
+check("speaks normally before goodnight", w._may_speak(ordinary) is True)
+quiet.begin()
+check("holds the ordinary during quiet hours",
+      w._may_speak(ordinary) is False)
+check("still speaks up about something urgent",
+      w._may_speak(urgent) is True)
+quiet.end()
+check("speaks again after good morning", w._may_speak(ordinary) is True)
+
+print("\n[snooze] silencing one thing leaves the rest alone")
+quiet.note_spoken("disk_full")
+quiet.snooze("disk_full", hours=8)
+check("the snoozed one goes quiet", w._may_speak(ordinary) is False)
+check("others are unaffected",
+      w._may_speak(Observation("memory_pressure", "Memory is high.")) is True)
+check("a snooze outranks urgency, since he asked for that one to stop",
+      w._may_speak(Observation("battery_critical", "Battery is at 9%.",
+                               critical=True)) is True,
+      "battery is a different id, so it still speaks")
+quiet.snooze("battery_critical", hours=8)
+check("even an urgent one, once explicitly snoozed",
+      w._may_speak(urgent) is False)
+quiet.clear_snoozes()
+check("clearing brings them back", w._may_speak(ordinary) is True)
+_shutil.rmtree(_qtmp, ignore_errors=True)
+
+
 # -- shutting down ------------------------------------------------
 print("\n[shutdown] stopping must be immediate, not eventual")
 

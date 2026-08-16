@@ -33,7 +33,8 @@ from jarvis.brain import persona  # noqa: E402
 from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
-from jarvis.config import CONFIG, LOGS_DIR  # noqa: E402
+from jarvis import quiet  # noqa: E402
+from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
 from jarvis.tools import documents, memory_tools, registry  # noqa: E402
@@ -170,6 +171,10 @@ class Jarvis:
         # Ollama orphans its llama-server child on restart or crash, and each
         # orphan keeps holding ~4 GB. They accumulate until a launch fails,
         # which orphans another one.
+        # Where quiet hours and snoozes are kept, so both survive a restart.
+        quiet.configure(DATA_DIR,
+                        self.cfg.get("watch.quiet_expire_hours", 12))
+
         state = health.startup_check()
         if state.get("orphans_killed"):
             await BUS.emit("boot", step=f"reclaimed "
