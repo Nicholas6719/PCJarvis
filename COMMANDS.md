@@ -128,6 +128,28 @@ He also mentions things before doing what you asked — a timer still running
 when you shut down, unsaved work in an editor. He says it once and then does
 as he was told.
 
+### Knowing whether you are there
+He watches for keyboard and mouse activity. After five minutes of nothing he
+assumes you have stepped away and **holds anything he notices** rather than
+announcing it to an empty room. The moment you touch anything he is back, and
+he tells you what you missed — only that, never a summary, and never anything
+he already said while you were sitting there.
+
+Most returns produce silence, because most of the time nothing happened.
+Switch it off with `presence: enabled: false`.
+
+### About himself
+**"how long have you been running?"** · **"how much memory are you using?"** ·
+**"what model are you?"** · **"tell me about yourself"**
+
+### Teaching him a word
+**"the word is Cannondale"** · **"learn the name Aoife"** · **"what words have
+I taught you?"**
+
+He already listens for your protocol names, the applications you actually use,
+and proper nouns from things he remembers — no setup. This is for anything he
+still gets wrong.
+
 ### Reading the screen
 **"what does this say?"** · **"read me that error"** · **"summarise this
 page"** · **"can you see the submit button?"**
