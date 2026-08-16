@@ -192,6 +192,27 @@ async def turn(app, rec: Recorder, text: str) -> tuple[str, list[str], float]:
 # ══════════════════════════════════════════════════════════════════
 #  Tests
 # ══════════════════════════════════════════════════════════════════
+async def test_follow_up_still_calls_a_tool(app, rec) -> None:
+    """The follow-up he answered most confidently, and most wrongly.
+
+    Asked "what about tomorrow" after a weather report, he relabelled today
+    as tomorrow: mostly sunny and mild, when the real forecast was heavy rain
+    ten degrees cooler. No tool call, no hedging, entirely invented. This is
+    the worst failure available to him, and it is silent -- nothing looks
+    wrong unless you go and check the sky.
+    """
+    print("\n[follow-up] a second question needs a second look")
+
+    said, tools, _ = await turn(app, rec, "what is the weather in Boston")
+    check("first question calls the tool", "get_weather" in tools, str(tools))
+
+    said, tools, _ = await turn(app, rec, "what about tomorrow")
+    check("FOLLOW-UP CALLS IT AGAIN rather than inventing",
+          "get_weather" in tools, f"{tools} | {said[:50]}")
+    check("and the answer is about tomorrow",
+          "tomorrow" in said.lower(), said[:60])
+
+
 async def test_ambient_watch(app, rec) -> None:
     """Does an unprompted observation actually reach his voice?
 
@@ -460,6 +481,7 @@ async def main() -> int:
         await test_deterministic_speed(app, rec)
         await test_accuracy(app, rec)
         await test_conversation_state(app, rec)
+        await test_follow_up_still_calls_a_tool(app, rec)
         await test_ambient_watch(app, rec)
         await test_dismiss_and_shutdown(app, rec)
         await test_documents(app, rec)

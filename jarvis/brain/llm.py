@@ -143,6 +143,12 @@ PRIMING: list[dict] = [
     {"role": "assistant",
      "content": "Free some space. Your downloads folder is usually the "
                 "quickest win."},
+    # Deliberately NOT here: an example of a weather follow-up calling the tool
+    # a second time. It was tried and made things worse. With the figures
+    # stripped out he recited the example's *words* instead -- "tomorrow in
+    # Framingham: clear and mild", no tool call, having never looked. Anything
+    # concrete in a tool result here is something he will eventually say back
+    # verbatim, numbers or not. The follow-up is handled in intents.py.
 ]
 # Both examples are deliberately *imperatives*, and neither tool result carries
 # a figure. An earlier version demonstrated get_system_stats with real numbers

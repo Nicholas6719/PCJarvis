@@ -66,6 +66,35 @@ def _timer_guard(m: re.Match) -> bool:
     return bool(parse_duration(m.group("dur").strip(" ,.")))
 
 
+def _timer_pending(m: "re.Match") -> bool:
+    """Only read "cancel it" as the timer when a timer is actually running.
+
+    "Cancel it" is meaningless on its own and the model treated it that way:
+    it called nothing, said nothing at all, and the timer kept running. With
+    a countdown in progress the phrase is unambiguous; without one it should
+    fall through and let the model ask what he means.
+    """
+    try:
+        from ..tools.timers import pending_descriptions
+
+        return bool(pending_descriptions())
+    except Exception:
+        return False
+
+
+def _tomorrow_args(m: "re.Match") -> dict:
+    from ..tools.web import last_weather_place
+
+    return {"location": last_weather_place(), "when": "tomorrow"}
+
+
+def _weather_recent(m: "re.Match") -> bool:
+    """Only read a bare "and tomorrow?" as weather if weather was just asked."""
+    from ..tools.web import last_weather_place
+
+    return bool(last_weather_place())
+
+
 def _protocol_exists(name: str) -> bool:
     """Only claim phrases like "work mode" when that protocol is real.
 
@@ -103,6 +132,8 @@ INTENTS: list[Intent] = [
            r"(?:timer|countdown)s?\s*[.!]?$", "cancel_timer"),
     Intent(r"^(?:jarvis[,\s]+)?(?:how\s+(?:long|much\s+time)\s+(?:is\s+)?"
            r"(?:left|remaining)|what\s+timers).*$", "list_timers"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:cancel|stop|clear|forget|kill)\s+(?:it|that|those)(?:\s+please)?\s*[.!]?$",
+           "cancel_timer", guard=_timer_pending),
 
     # ══ system readings ══ answered from the tool, never paraphrased
     Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:my\s+|the\s+)?"
@@ -199,6 +230,15 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:make\s+a\s+note|note)(?:\s+that)?\s+(?P<text>.+)$",
            "add_note", lambda m: {"text": m.group("text").strip()}),
     Intent(r"^(?:jarvis[,\s]+)?(?:read|what\s+are)\s+my\s+notes\s*[.?!]?$", "read_notes"),
+
+    # ══ weather ══
+    # A follow-up is where he fabricated most confidently: asked "what about
+    # tomorrow" he relabelled today as tomorrow and was wrong by ten degrees
+    # and a rainstorm. Handled here so a real forecast is fetched.
+    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:the\s+)?weather\s+(?:like\s+)?tomorrow\s*[.?!]?$",
+           "get_weather", lambda m: {"when": "tomorrow"}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:and|what\s+about|how\s+about)\s+tomorrow\s*[.?!]?$",
+           "get_weather", _tomorrow_args, guard=_weather_recent),
 
     # ══ named protocols ══
     # "JARVIS, initiate the House Party protocol." The guard is what makes the

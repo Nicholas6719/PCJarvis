@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import httpx
 
@@ -27,6 +28,26 @@ _CONSENT = ("we and our partners", "accept all cookies", "cookie policy",
 
 _STOP = {"the", "a", "an", "of", "for", "and", "in", "on", "to", "is",
          "what", "how", "why", "latest", "news", "about", "any"}
+
+
+# The place he last asked about, so "what about tomorrow" resolves without
+# him naming the city again. This is the smallest useful piece of referent
+# memory: the model cannot be trusted to carry it, having answered that exact
+# follow-up by relabelling today's figures as tomorrow's and getting every
+# one of them wrong.
+_last_place: dict = {"name": "", "at": 0.0}
+
+
+def last_weather_place() -> str:
+    """The city asked about in the last ten minutes, or empty.
+
+    Time-limited on purpose. An hour later "what about tomorrow" is about
+    something else entirely, and answering it with a stale city is exactly
+    the confident wrongness this exists to prevent.
+    """
+    if time.time() - _last_place["at"] > 600:
+        return ""
+    return _last_place["name"]
 
 
 def precise_location() -> tuple[float, float, str] | None:
@@ -198,11 +219,14 @@ def read_webpage(url: str) -> str:
 
 
 @tool(category="web", speak_while_running=True)
-def get_weather(location: str = "") -> str:
-    """Get the current weather and today's forecast.
+def get_weather(location: str = "", when: str = "today") -> str:
+    """Get the weather for today or tomorrow.
 
     Args:
         location: City name. Leave empty to use the current location.
+        when: "today" or "tomorrow". Asked "what about tomorrow" with no way
+            to answer it, the model invented a forecast and stated it as fact,
+            which is why this argument exists.
     """
     try:
         with httpx.Client(timeout=15.0, headers={"User-Agent": UA}) as client:
@@ -250,15 +274,33 @@ def get_weather(location: str = "") -> str:
                     "current": "temperature_2m,relative_humidity_2m,apparent_"
                                "temperature,precipitation,weather_code,wind_speed_10m",
                     "daily": "temperature_2m_max,temperature_2m_min,"
-                             "precipitation_probability_max",
+                             "precipitation_probability_max,weather_code",
                     "temperature_unit": "fahrenheit",
                     "wind_speed_unit": "mph",
                     "timezone": "auto",
-                    "forecast_days": 1,
+                    "forecast_days": 2,
                 },
             ).json()
 
         cur, daily = w["current"], w["daily"]
+        _last_place["name"] = name
+        _last_place["at"] = time.time()
+
+        # Tomorrow has no "current" reading, so it is a forecast line only.
+        if (when or "").lower().strip().startswith("tomorrow"):
+            if len(daily["temperature_2m_max"]) < 2:
+                return (f"I could not get tomorrow's forecast for {name}, so I "
+                        f"would rather not guess at it.")
+            sky = WEATHER_CODES.get(daily.get("weather_code", [0, 0])[1],
+                                    "unclear skies")
+            return (
+                f"Tomorrow in {name}: {sky}, high of "
+                f"{daily['temperature_2m_max'][1]:.0f}, low of "
+                f"{daily['temperature_2m_min'][1]:.0f}, "
+                f"{daily['precipitation_probability_max'][1]:.0f} percent "
+                f"chance of rain."
+            )
+
         return (
             f"In {name}: {WEATHER_CODES.get(cur['weather_code'], 'unclear skies')}, "
             f"{cur['temperature_2m']:.0f} degrees, feels like "
