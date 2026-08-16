@@ -34,7 +34,7 @@ from jarvis.brain.llm import Brain  # noqa: E402
 from jarvis.brain.memory import Memory  # noqa: E402
 from jarvis.bus import BUS  # noqa: E402
 from jarvis import (briefing, docs, history, patterns,  # noqa: E402
-                    quiet, schedules, standing)
+                    quiet, schedules, standing, vocabulary)
 from jarvis.config import CONFIG, DATA_DIR, LOGS_DIR  # noqa: E402
 from jarvis import health  # noqa: E402
 from jarvis.state import State  # noqa: E402
@@ -43,6 +43,7 @@ from jarvis.tools import text as text_tools  # noqa: E402
 from jarvis.watch import Watcher  # noqa: E402
 from jarvis.voice.speaker import Speaker  # noqa: E402
 from jarvis.voice.boot_sound import make_boot_sound  # noqa: E402
+from jarvis.voice import tones  # noqa: E402
 from jarvis.voice.tts import Voice, make_chime  # noqa: E402
 
 log = logging.getLogger("jarvis")
@@ -180,6 +181,7 @@ class Jarvis:
         schedules.configure(DATA_DIR)  # protocols that run on their own
         docs.configure(DATA_DIR)       # his own writing, searchable
         patterns.configure(DATA_DIR)   # habits he has noticed
+        vocabulary.configure(DATA_DIR)  # words he has taught the ear
 
         state = health.startup_check()
         if state.get("orphans_killed"):
@@ -326,6 +328,17 @@ class Jarvis:
         except Exception:
             log.debug("boot sound failed; carrying on in silence",
                       exc_info=True)
+
+    def tone(self, name: str) -> None:
+        """A short sound from the palette. Silent if switched off."""
+        if not self.cfg.get("audio.tones", True) or not self.speaker:
+            return
+        try:
+            audio = tones.make(name, self.voice.sample_rate)
+            if audio is not None:
+                self.speaker.play_audio(audio, self.voice.sample_rate)
+        except Exception:
+            log.debug("tone %s failed", name, exc_info=True)
 
     def chime(self) -> None:
         if self.cfg.get("wake.chime", True) and self.speaker:
@@ -487,6 +500,11 @@ class Jarvis:
 
         self._last_proactive = text
         log.info("speaking unprompted: %s", text)
+        # A sound before speech nobody asked for. It marks the difference
+        # between an answer and an interruption, which is otherwise only
+        # apparent once he is already talking.
+        self.tone("attention")
+        await asyncio.sleep(0.32)
         await BUS.emit("proactive.spoken", text=text)
         await self.speak(text)
 

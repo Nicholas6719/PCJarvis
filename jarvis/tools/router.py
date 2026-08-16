@@ -109,6 +109,13 @@ EXTRAS: dict[str, set[str]] = {
                             "what do you do", "your abilities"},
     "get_time_until":      {"how long until", "time until"},
 
+    "learn_word":          {"the word is", "learn the word",
+                            "learn the name", "how to spell",
+                            "keep mishearing"},
+    "list_learned_words":  {"what words", "taught you"},
+    "about_yourself":      {"have you been running", "are you using",
+                            "what model are you", "about yourself",
+                            "your uptime", "are you running on"},
     "get_trend":           {"has been", "this week", "usual", "lately",
                             "trend", "over time", "compared to"},
 

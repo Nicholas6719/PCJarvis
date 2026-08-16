@@ -390,3 +390,111 @@ def what_did_i_miss() -> str:
     if not held:
         return "Nothing worth mentioning."
     return " ".join(h.rstrip(".") + "." for h in held[:3])
+
+
+# ══════════════════════════════════════════════════════════════════
+#  Himself
+# ══════════════════════════════════════════════════════════════════
+@tool(category="system")
+def about_yourself(topic: str = "all") -> str:
+    """Report on his own state: uptime, memory, model, voice, capabilities.
+
+    Use for "how long have you been running", "how much memory are you
+    using", "what model are you", "what are you running on".
+
+    Args:
+        topic: "uptime", "memory", "model", "voice", or "all".
+    """
+    from ..config import CONFIG
+    from .registry import REGISTRY
+
+    key = (topic or "all").lower().strip()
+    parts = []
+
+    if key in ("all", "uptime", "running"):
+        try:
+            started = psutil.Process().create_time()
+            up = time.time() - started
+            if up < 90:
+                spoken = f"{up:.0f} second" + ("" if round(up) == 1 else "s")
+            elif up < 5400:
+                spoken = f"{up / 60:.0f} minutes"
+            else:
+                spoken = f"{up / 3600:.1f} hours"
+            parts.append(f"I have been running for {spoken}")
+        except Exception:
+            pass
+
+    if key in ("all", "memory", "ram"):
+        try:
+            # Him and the model host together. Reporting only the Python
+            # process would be honest and misleading -- almost all of the
+            # weight is the language model sitting in Ollama's child, and
+            # that is the number he actually wants when he asks.
+            mine = psutil.Process().memory_info().rss
+            model = 0
+            for p in psutil.process_iter(["name", "memory_info"]):
+                name = (p.info.get("name") or "").lower()
+                if "ollama" in name or "llama" in name:
+                    model += (p.info.get("memory_info").rss
+                              if p.info.get("memory_info") else 0)
+            total = mine + model
+            # Below a gigabyte, "0.0 GB" is the wrong unit rather than a small
+            # number, and reads as though he is using nothing at all.
+            if total >= 1e9:
+                spoken_mem = f"{total / 1e9:.1f} GB"
+            else:
+                spoken_mem = f"{total / 1e6:.0f} MB"
+            if model:
+                parts.append(f"using {spoken_mem}, most of it the model")
+            else:
+                parts.append(f"using {spoken_mem}")
+        except Exception:
+            pass
+
+    if key in ("all", "model", "brain"):
+        parts.append(f"thinking with {CONFIG.get('llm.model')}")
+
+    if key in ("voice",):
+        parts.append(f"speaking as {CONFIG.get('tts.voice')}")
+
+    if key in ("all", "tools", "capabilities"):
+        parts.append(f"and I have {len(REGISTRY)} tools")
+
+    if not parts:
+        return "I am here and working."
+    # Upper-case the first letter only. capitalize() lower-cases everything
+    # after it, which turned "GB" into "gb" and "I" into "i".
+    line = ", ".join(parts)
+    return line[0].upper() + line[1:] + "."
+
+
+@tool(category="system")
+def learn_word(word: str) -> str:
+    """Teach him a word or name he keeps mishearing.
+
+    Use for "the word is Cannondale", "learn the name Aoife", "remember how to
+    spell Kaggle".
+
+    Args:
+        word: The word or name, spelled correctly.
+    """
+    from .. import vocabulary
+
+    clean = (word or "").strip()
+    if not clean:
+        return "Which word?"
+    if not vocabulary.teach(clean):
+        return f"I already listen for {clean}."
+    return f"Noted. I'll listen for {clean}."
+
+
+@tool(category="system")
+def list_learned_words() -> str:
+    """List the words he has been explicitly taught."""
+    from .. import vocabulary
+
+    words = vocabulary.taught_words()
+    if not words:
+        return "You have not taught me any words yet."
+    return "You have taught me " + ", ".join(words) + "."

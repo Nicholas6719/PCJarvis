@@ -274,6 +274,20 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?where\s+has\s+my\s+day\s+gone\s*[.?!]?$",
            "what_have_i_been_doing"),
 
+    # ══ teaching him a word ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:the\s+word\s+is|learn\s+the\s+(?:word|name))\s+(?P<w>[\w'-]+)\s*[.!]?$",
+           "learn_word", lambda m: {"word": m.group("w")}),
+
+    # ══ himself ══
+    Intent(r"^(?:jarvis[,\s]+)?how\s+long\s+have\s+you\s+been\s+(?:running|up|awake|on)\s*[.?!]?$",
+           "about_yourself", lambda m: {"topic": "uptime"}),
+    Intent(r"^(?:jarvis[,\s]+)?how\s+much\s+(?:memory|ram)\s+are\s+you\s+using\s*[.?!]?$",
+           "about_yourself", lambda m: {"topic": "memory"}),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+model\s+are\s+you(?:\s+running)?\s*[.?!]?$",
+           "about_yourself", lambda m: {"topic": "model"}),
+    Intent(r"^(?:jarvis[,\s]+)?tell\s+me\s+about\s+yourself\s*[.?!]?$",
+           "about_yourself"),
+
     # ══ standing watches ══
     # Ordered narrowest first. The last pattern would happily swallow the
     # download and battery phrasings, so they get their turn before it.

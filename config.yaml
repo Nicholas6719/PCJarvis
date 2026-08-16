@@ -7,6 +7,8 @@ audio:
   input_device: null        # null = system default. Set to index or name substring.
   output_device: null
   boot_sound: true          # the arc-reactor power-up on launch
+  tones: true               # short sounds: before an unprompted remark,
+                            # and when something fails
   sample_rate: 16000        # mic rate; wake word + whisper both want 16k
   block_size: 1280          # 80ms @ 16k — openWakeWord's native frame
 

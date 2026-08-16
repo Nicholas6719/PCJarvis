@@ -18,6 +18,21 @@ DOMAIN_PROMPT = (
     "Yoga, PDF, CPU, RAM, GPU, screenshot, clipboard, playlist, battery."
 )
 
+def _prompt() -> str:
+    """The words to expect: the fixed list plus whatever he has taught it.
+
+    Falls back to the fixed list if the vocabulary is unavailable. A worse
+    prompt transcribes slightly worse; no prompt at all is what this existed
+    to fix in the first place.
+    """
+    try:
+        from ..vocabulary import prompt
+
+        return prompt() or DOMAIN_PROMPT
+    except Exception:
+        return DOMAIN_PROMPT
+
+
 # Whisper hallucinates these into silence. Drop them rather than act on them.
 _HALLUCINATIONS = {
     "thank you.", "thanks for watching!", "thank you for watching!",
@@ -73,7 +88,7 @@ class Transcriber:
             language="en",
             vad_filter=False,          # we already did our own VAD
             condition_on_previous_text=False,  # stops runaway repetition
-            initial_prompt=DOMAIN_PROMPT,
+            initial_prompt=_prompt(),
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         log.debug("transcribed %.1fs of audio in %.2fs", len(audio) / 16000,
