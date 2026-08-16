@@ -167,6 +167,19 @@ def list_timers() -> str:
     return "You have " + ", and ".join(parts) + "."
 
 
+def pending_descriptions() -> list[str]:
+    """How much is left on each running timer, spoken.
+
+    Used by jarvis.cautions, which mentions them before he shuts the machine
+    down. It reads the same store list_timers does, but returns the pieces
+    rather than a finished sentence, because a caution is worded differently
+    from an answer.
+    """
+    now = time.time()
+    return [_spoken(max(0, t["ends_at"] - now))
+            for t in sorted(_timers.values(), key=lambda x: x["ends_at"])]
+
+
 @tool(category="timers")
 def cancel_timer(label: str = "") -> str:
     """Cancel a running timer.

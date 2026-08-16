@@ -166,12 +166,22 @@ async def execute(name: str, arguments: dict) -> str:
     if missing:
         return f"Error: {name} requires {', '.join(missing)}."
 
+    # The objection, voiced once, before the thing is done -- not a
+    # confirmation, which is a separate mechanism that asks first. Computed
+    # before the call on purpose: once a shutdown has cancelled the timers
+    # there is nothing left to mention.
+    from ..cautions import caution_for
+
+    warning = caution_for(name, cleaned)
+
     try:
         if t.is_async:
             result = await t.fn(**cleaned)
         else:
             result = await asyncio.to_thread(lambda: t.fn(**cleaned))
         text = str(result) if result is not None else "Done."
+        if warning:
+            text = f"{warning} {text}"
         return text[:4000]  # keep tool output from swamping the context window
     except Exception as e:
         log.exception("tool %s failed", name)
