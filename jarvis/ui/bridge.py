@@ -191,6 +191,17 @@ class UIChannel:
             if telemetry:
                 batch.append({"type": "telemetry", **telemetry})
 
+            # Assembled on the watch tick; this is a dictionary copy and
+            # nothing more. See jarvis/hud.py for why.
+            try:
+                from ..hud import latest
+
+                panels = latest()
+                if panels:
+                    batch.append({"type": "hud", **panels})
+            except Exception:
+                log.debug("no hud snapshot available", exc_info=True)
+
         if not batch:
             return
 

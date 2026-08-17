@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import (briefing, history, patterns, presence, quiet,
+from . import (briefing, history, hud, patterns, presence, quiet,
                schedules, standing)
 from .bus import BUS
 
@@ -404,6 +404,15 @@ class Watcher:
         self._loop = asyncio.get_running_loop()
         log.info("ambient watch running, every %.0fs", interval)
 
+        # Paint the interface before settling. The observations need a quiet
+        # period before they can judge anything, but the panels do not -- and
+        # leaving them empty for the first two minutes made a freshly booted
+        # HUD look broken.
+        try:
+            hud.refresh(present=self.presence.present())
+        except Exception:
+            log.debug('first hud snapshot failed', exc_info=True)
+
         # Let the machine settle before forming an opinion of it. Boot is the
         # busiest the processor will be all session, and remarking on that
         # would be both wrong and the very first thing he ever said unprompted.
@@ -412,6 +421,12 @@ class Watcher:
         while self._running:
             try:
                 self.presence.update()
+
+                # The interface repaints from a writer thread that also
+                # drives the level meter at 30Hz, with the audio pipeline
+                # behind it. Gathering its panels there would stall the
+                # microphone, so it is gathered here and merely copied there.
+                hud.refresh(present=self.presence.present())
                 if self.presence.take_return():
                     # He is back. Say what he missed, and only that.
                     caught_up = briefing.missed()

@@ -23,9 +23,42 @@
 </header>
 
 <main>
-  <!-- ── left: the reactor ─────────────────────────────────────── -->
-  <section id="left">
-    <canvas id="reactor" width="440" height="440"></canvas>
+  <!-- ── left: the machine ─────────────────────────────────────── -->
+  <section id="left" class="gutter">
+    <div class="metric">
+      <div class="metric-row"><label>MEMORY</label><span id="v-mem" class="metric-val">--</span></div>
+      <div class="bar"><i id="g-mem"></i></div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-row"><label>PROCESSOR</label><span id="v-cpu" class="metric-val">--</span></div>
+      <div class="bar"><i id="g-cpu"></i></div>
+    </div>
+
+    <div class="metric">
+      <div class="metric-row"><label>POWER</label><span id="v-bat" class="metric-val">--</span></div>
+      <div class="bar"><i id="g-bat"></i></div>
+      <span id="power-note" class="sub"></span>
+    </div>
+
+    <div class="metric">
+      <label>MEMORY &middot; 7 DAYS</label>
+      <div id="spark" class="spark" aria-hidden="true"></div>
+      <span id="trend-note" class="sub"></span>
+    </div>
+
+    <div class="metric push">
+      <label>STORAGE</label>
+      <div class="metric-row"><span id="v-storage" class="big">--</span></div>
+      <div class="bar"><i id="g-storage"></i></div>
+    </div>
+  </section>
+
+  <!-- ── centre: the reactor ───────────────────────────────────── -->
+  <section id="centre">
+    <div id="dial">
+      <canvas id="reactor" width="520" height="520"></canvas>
+    </div>
 
     <div id="status">
       <div id="state-label">booting</div>
@@ -37,40 +70,73 @@
       <div class="track"><i id="convo-bar"></i></div>
     </div>
 
-    <div id="controls">
-      <button id="btn-talk" class="primary" title="Push to talk">
-        <span class="dot"></span> TALK
-      </button>
-      <button id="btn-mute" title="Mute microphone">MIC ON</button>
-      <button id="btn-stop" title="Interrupt">STOP</button>
-    </div>
-
-    <div id="telemetry">
-      <div class="gauge"><label>CPU</label>
-        <div class="bar"><i id="g-cpu"></i></div><span id="v-cpu">--</span></div>
-      <div class="gauge"><label>MEM</label>
-        <div class="bar"><i id="g-mem"></i></div><span id="v-mem">--</span></div>
-      <div class="gauge"><label>PWR</label>
-        <div class="bar"><i id="g-bat"></i></div><span id="v-bat">--</span></div>
+    <!-- the last thing he said. Inside the centre column on purpose: the
+         CSS positions it against #centre, and as a sibling of <main> it
+         resolved against the viewport instead and sat on top of the
+         footer buttons. -->
+    <div id="lastword" hidden>
+      <span class="who">JARVIS</span>
+      <span id="lastword-body"></span>
     </div>
   </section>
 
-  <!-- ── right: conversation ───────────────────────────────────── -->
-  <section id="right">
-    <div id="transcript" role="log" aria-live="polite"></div>
-
-    <div id="composer">
-      <input id="input" type="text" autocomplete="off" spellcheck="false"
-             placeholder="Type to JARVIS, or say &quot;Hey JARVIS&quot;">
-      <button id="btn-send">SEND</button>
+  <!-- ── right: what he is holding ─────────────────────────────── -->
+  <section id="right" class="gutter">
+    <div class="metric">
+      <label>WATCHING FOR</label>
+      <div id="watch-list" class="list">
+        <div class="empty">nothing at the moment</div>
+      </div>
     </div>
 
-    <aside id="activity">
-      <div class="act-head">SYSTEM ACTIVITY</div>
-      <div id="act-log"></div>
-    </aside>
+    <div class="metric">
+      <label>WORKING ON</label>
+      <div id="context-line" class="big">&mdash;</div>
+    </div>
+
+    <div class="metric push">
+      <label>REMEMBERS</label>
+      <div class="metric-row"><span id="v-facts" class="big">--</span></div>
+      <span class="sub">Documents &middot; JARVIS &middot; Memory</span>
+    </div>
   </section>
 </main>
+
+
+<footer id="foot">
+  <span class="pair"><label>AT THE DESK</label><b id="f-present">&mdash;</b></span>
+  <span class="pair"><label>MODEL</label><b id="f-model">&mdash;</b></span>
+  <span class="pair"><label>VOICE</label><b id="f-voice">&mdash;</b></span>
+  <span class="pair"><label>TOOLS</label><b id="f-tools">&mdash;</b></span>
+  <span class="pair"><label>UP</label><b id="f-uptime">&mdash;</b></span>
+
+  <div id="controls">
+    <button id="btn-talk" class="primary" title="Push to talk"><span class="dot"></span>TALK</button>
+    <button id="btn-mute" title="Mute microphone">MIC ON</button>
+    <button id="btn-stop" title="Interrupt">STOP</button>
+    <button id="btn-drawer" title="Conversation (Tab)">TRANSCRIPT</button>
+  </div>
+
+  <div id="ticker"></div>
+</footer>
+
+<!-- the conversation, out of the way until asked for -->
+<div id="drawer" hidden>
+  <div class="drawer-head">
+    <span>CONVERSATION</span>
+    <button id="btn-drawer-close" title="Close (Esc)">&#10005;</button>
+  </div>
+  <div id="transcript" role="log" aria-live="polite"></div>
+  <div id="composer">
+    <input id="input" type="text" autocomplete="off" spellcheck="false"
+           placeholder="Type to JARVIS, or say &quot;Hey JARVIS&quot;">
+    <button id="btn-send">SEND</button>
+  </div>
+  <aside id="activity">
+    <div class="act-head">SYSTEM ACTIVITY</div>
+    <div id="act-log"></div>
+  </aside>
+</div>
 
 <div id="boot-overlay">
   <div class="boot-inner">

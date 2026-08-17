@@ -74,7 +74,19 @@ function addJarvis(text) {
 
 /* ── activity log ────────────────────────────────────────────── */
 const actLog = document.getElementById('act-log');
+const ticker = document.getElementById('ticker');
+function addTicker(text) {
+  const ts = new Date().toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5);
+  ticker.innerHTML = '';
+  const t = document.createElement('span');
+  t.className = 't'; t.textContent = ts;
+  const n = document.createElement('span');
+  n.textContent = truncate(text, 60);
+  ticker.append(t, n);
+}
+
 function addActivity(text, cls = 'tool') {
+  if (cls === 'tool' || cls === 'ok') addTicker(text.replace(/^\s*->\s*/, ''));
   const el = document.createElement('div');
   el.className = `act ${cls}`;
   const ts = new Date().toLocaleTimeString('en-GB', { hour12: false });
@@ -140,7 +152,13 @@ window.onJarvis = function (ev) {
       setGauge('mem', ev.mem, `${Math.round(ev.mem)}%`);
       if (ev.battery != null) {
         setGauge('bat', ev.battery, `${ev.battery}%${ev.charging ? '+' : ''}`);
+        document.getElementById('power-note').textContent =
+          ev.charging ? 'plugged in' : 'on battery';
       }
+      break;
+
+    case 'hud':
+      renderHud(ev);
       break;
 
     case 'wake.detected':
@@ -194,6 +212,7 @@ window.onJarvis = function (ev) {
 
     case 'speaking':
       addJarvis(ev.text);
+      showLastWord(ev.text);
       break;
 
     case 'tool':
@@ -310,8 +329,22 @@ document.addEventListener('keydown', (e) => {
 
 function setGauge(id, pct, label) {
   if (pct == null || isNaN(pct)) return;
-  document.getElementById(`g-${id}`).style.width = `${Math.min(pct, 100)}%`;
-  document.getElementById(`v-${id}`).textContent = label;
+  const bar = document.getElementById(`g-${id}`);
+  const val = document.getElementById(`v-${id}`);
+  if (!bar) return;
+  bar.style.width = `${Math.min(pct, 100)}%`;
+  if (val) val.textContent = label;
+
+  // Severity in the bar as well as the number, so pressure reads at a
+  // glance instead of having to compare figures. Power runs the other way
+  // round: low is the problem there, not high.
+  const bad  = id === 'bat' ? pct <= 20 : pct >= 92;
+  const near = id === 'bat' ? pct <= 35 : pct >= 80;
+  for (const el of [bar, val]) {
+    if (!el) continue;
+    el.classList.toggle('crit', bad);
+    el.classList.toggle('warn', !bad && near);
+  }
 }
 
 /* the backend may already be up before the page finishes loading */
@@ -323,4 +356,152 @@ window.addEventListener('pywebviewready', async () => {
       if (s.state !== 'booting') hideBoot();
     }
   } catch (_) { /* ignore */ }
+});
+
+/* ══════════════════════════════════════════════════════════════
+   The panels around the reactor
+
+   Everything here is assembled in Python on the watch tick and arrives as
+   one 'hud' event every few seconds. This side only paints it -- see
+   jarvis/hud.py for why none of it is gathered on the thread that draws.
+
+   Values change in place and panels never reflow, which is the whole point
+   of the layout: after a week you glance at a position rather than reading
+   a label.
+   ══════════════════════════════════════════════════════════════ */
+
+function renderHud(h) {
+  // watches he is holding
+  const list = document.getElementById('watch-list');
+  list.innerHTML = '';
+  if (!h.watches || !h.watches.length) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'nothing at the moment';
+    list.appendChild(e);
+  } else {
+    for (const w of h.watches) {
+      const row = document.createElement('div');
+      row.className = 'item';
+      const pip = document.createElement('span');
+      pip.className = 'pip';
+      const label = document.createElement('span');
+      label.textContent = w;
+      row.append(pip, label);
+      list.appendChild(row);
+    }
+  }
+
+  if (h.context && h.context.summary) {
+    document.getElementById('context-line').textContent = h.context.summary;
+  }
+  if (h.facts != null) {
+    document.getElementById('v-facts').textContent =
+      `${h.facts} fact${h.facts === 1 ? '' : 's'}`;
+  }
+
+  // The seven-day memory trend. Below three days there is no shape to draw:
+  // a single value at flex:1 filled the whole strip and rendered as a solid
+  // block, which read as a bar at 100% rather than as one day of data.
+  const spark = document.getElementById('spark');
+  if (h.trend && h.trend.memory && h.trend.memory.length >= 3) {
+    spark.style.display = '';
+    const vals = h.trend.memory;
+    const top = Math.max(...vals, 1);
+    spark.innerHTML = '';
+    vals.forEach((v, i) => {
+      const bar = document.createElement('i');
+      bar.style.height = `${Math.max(4, (v / top) * 100)}%`;
+      if (i === vals.length - 1 && v >= 88) bar.classList.add('hi');
+      spark.appendChild(bar);
+    });
+  } else {
+    spark.style.display = 'none';
+  }
+  if (h.trend && h.trend.label) {
+    const note = document.getElementById('trend-note');
+    note.textContent = truncate(h.trend.label, 64);
+    note.classList.toggle('warn', /climb|higher|worse|rising/i.test(h.trend.label));
+  }
+
+  if (h.storage && h.storage.free_gb != null) {
+    document.getElementById('v-storage').textContent = `${h.storage.free_gb} GB free`;
+    const used = document.getElementById('g-storage');
+    used.style.width = `${h.storage.percent || 0}%`;
+    used.classList.toggle('crit', (h.storage.percent || 0) >= 92);
+  }
+
+  // identity, along the footer
+  const present = document.getElementById('f-present');
+  present.textContent = h.present ? 'yes' : 'away';
+  present.className = h.present ? 'yes' : 'no';
+  if (h.model) document.getElementById('f-model').textContent = h.model;
+  if (h.voice) document.getElementById('f-voice').textContent = h.voice;
+  if (h.tools != null) document.getElementById('f-tools').textContent = h.tools;
+  if (h.uptime_s != null) {
+    document.getElementById('f-uptime').textContent = fmtUptime(h.uptime_s);
+  }
+}
+
+function fmtUptime(s) {
+  if (s < 90) return `${Math.round(s)}s`;
+  if (s < 5400) return `${Math.round(s / 60)}m`;
+  const h = Math.floor(s / 3600);
+  return `${h}h ${Math.round((s - h * 3600) / 60)}m`;
+}
+
+/* ── the last thing he said ──────────────────────────────────────
+   The conversation is not the screen in this layout, so the most recent
+   line has to stay somewhere. It is replaced rather than appended: this is
+   the last thing, not a log. */
+const lastWordEl = document.getElementById('lastword');
+const lastWordBody = document.getElementById('lastword-body');
+let lastWordTimer = null;
+
+function showLastWord(text) {
+  if (!text) return;
+  lastWordBody.textContent = text;
+  lastWordEl.hidden = false;
+  clearTimeout(lastWordTimer);
+  // Long enough to read at a glance, short enough that a stale line does
+  // not sit there pretending to be current.
+  lastWordTimer = setTimeout(() => { lastWordEl.hidden = true; }, 45000);
+}
+
+/* ── the drawer ──────────────────────────────────────────────────
+   The full transcript, out of the way until asked for. Tab opens it,
+   Escape closes it, and typing anywhere opens it and starts the message --
+   which is how you discover it exists without being told. */
+const drawer = document.getElementById('drawer');
+const drawerBtn = document.getElementById('btn-drawer');
+
+function openDrawer(focus = true) {
+  drawer.hidden = false;
+  drawerBtn.classList.add('active');
+  if (focus) document.getElementById('input').focus();
+  const t = document.getElementById('transcript');
+  t.scrollTop = t.scrollHeight;
+}
+function closeDrawer() {
+  drawer.hidden = true;
+  drawerBtn.classList.remove('active');
+  document.getElementById('input').blur();
+}
+function toggleDrawer() { drawer.hidden ? openDrawer() : closeDrawer(); }
+
+drawerBtn.addEventListener('click', toggleDrawer);
+document.getElementById('btn-drawer-close').addEventListener('click', closeDrawer);
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) {
+    e.preventDefault(); toggleDrawer(); return;
+  }
+  if (e.key === 'Escape' && !drawer.hidden) { closeDrawer(); return; }
+  // A printable key with nothing focused means he wants to type at it.
+  if (drawer.hidden && e.key.length === 1 && !e.ctrlKey && !e.altKey &&
+      !e.metaKey && document.activeElement === document.body) {
+    openDrawer();
+    document.getElementById('input').value = e.key;
+    e.preventDefault();
+  }
 });
