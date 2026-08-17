@@ -3,6 +3,7 @@ config.local.yaml (gitignored) overrides it if present."""
 from __future__ import annotations
 
 import copy
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,27 @@ else:
     BUNDLE = ROOT
 
 MODELS_DIR = ROOT / "models"
-DATA_DIR = ROOT / "data"
-LOGS_DIR = ROOT / "logs"
+
+# Everything he accumulates -- the conversation, standing watches, quiet
+# hours, learned words, months of readings -- lives OUTSIDE the build output
+# when frozen.
+#
+# It used to live in dist/JARVIS/data, beside the exe, which seemed tidy and
+# was wrong: PyInstaller --clean removes dist/JARVIS wholesale, so every
+# rebuild silently destroyed all of it. His conversation was gone from the
+# packaged app before anyone noticed, and standing watches he had set would
+# have vanished the same way. LocalAppData is where Windows applications are
+# meant to keep this, and no build step can reach it.
+#
+# Running from source keeps using ./data, which is gitignored and is not
+# deleted by anything.
+if FROZEN:
+    _STATE = Path(os.environ.get("LOCALAPPDATA") or ROOT) / "JARVIS"
+else:
+    _STATE = ROOT
+
+DATA_DIR = _STATE / "data"
+LOGS_DIR = _STATE / "logs"
 
 
 def _config_path() -> Path:
