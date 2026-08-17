@@ -150,6 +150,16 @@ def now_playing() -> str:
             app = app[:-4]
         app = app.strip()
 
+        # Worth seeing as well as hearing: a track name spoken is gone the
+        # moment it is said, and seeing it is the fastest way to know he
+        # picked the right thing.
+        try:
+            from ..panel import show
+
+            show('playing', title=title, artist=artist, app=app, state=state)
+        except Exception:
+            pass
+
         text = f"{state}: {title}"
         if artist:
             text += f" by {artist}"

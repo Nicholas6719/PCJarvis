@@ -143,7 +143,12 @@ def refresh(present: bool = True) -> dict:
             "facts": _facts(),
             "storage": _storage(),
             "present": bool(present),
-            "uptime_s": round(time.time() - _started),
+            # Sent as a start time rather than a duration: the page ticks
+            # it every second. Sending the elapsed value meant it only
+            # changed when a new snapshot arrived, so it read "9s" for a
+            # full minute -- the same staleness that made "at the desk"
+            # untrustworthy.
+            "started_at": _started,
             **_identity(),
         }
     except Exception:

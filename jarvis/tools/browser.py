@@ -220,8 +220,31 @@ def search_site(site: str, query: str) -> str:
                 else f"I could not open {domain}.")
 
     url = SITE_SEARCH[wanted].format(q=urllib.parse.quote(term))
+    opened = _open(url)
+
+    # Cards on screen as well as the real page in his browser. Drawn from a
+    # site-scoped search rather than by embedding the site: Amazon sends no
+    # framing headers today, but sites break out of frames with JavaScript and
+    # change those headers without warning, so an embed works right up until
+    # the morning it silently does not.
+    try:
+        from ddgs import DDGS
+
+        from ..panel import show
+
+        with DDGS() as ddgs:
+            hits = list(ddgs.text(f"site:{wanted}.com {term}", max_results=4))
+        if hits:
+            show("results", title=f"{wanted} · {term}",
+                 items=[{"title": (h.get("title") or "")[:90],
+                         "snippet": (h.get("body") or "").replace(chr(10), " ")[:120],
+                         "url": h.get("href") or h.get("link") or ""}
+                        for h in hits])
+    except Exception:
+        log.debug("could not fetch cards for the site search", exc_info=True)
+
     return (f"Here are the {wanted.capitalize()} results for {term}."
-            if _open(url) else f"I could not open {wanted}.")
+            if opened else f"I could not open {wanted}.")
 
 
 def _salvage_query(text: str, site: str) -> str:

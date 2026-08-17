@@ -123,7 +123,16 @@ function setState(s) {
 /* The engine sends batches, coalesced at 30Hz by a writer thread, so the page
    never blocks the audio pipeline and never falls behind it. */
 window.onJarvisBatch = function (batch) {
-  for (const ev of batch) window.onJarvis(ev);
+  for (const ev of batch) {
+    try {
+      window.onJarvis(ev);
+    } catch (err) {
+      // One malformed event used to take the rest of its batch with it. A
+      // missing helper threw on every telemetry tick and silently stopped
+      // everything queued behind it in the same message.
+      console.warn('event failed', ev && ev.type, err);
+    }
+  }
 };
 
 window.onJarvis = function (ev) {
@@ -160,15 +169,23 @@ window.onJarvis = function (ev) {
     case 'telemetry':
       setGauge('cpu', ev.cpu, `${Math.round(ev.cpu)}%`);
       setGauge('mem', ev.mem, `${Math.round(ev.mem)}%`);
+      // The gauges live in the status card now, which only exists while it is
+      // on screen. setGauge already no-ops on a missing element.
       if (ev.battery != null) {
         setGauge('bat', ev.battery, `${ev.battery}%${ev.charging ? '+' : ''}`);
-        document.getElementById('power-note').textContent =
-          ev.charging ? 'plugged in' : 'on battery';
       }
       break;
 
     case 'hud':
-      renderHud(ev);
+      if (ev.started_at != null) startedAt = ev.started_at;
+      break;
+
+    case 'panel':
+      showPanel(ev);
+      break;
+
+    case 'panel.clear':
+      hidePanel();
       break;
 
     case 'wake.detected':
@@ -210,6 +227,9 @@ window.onJarvis = function (ev) {
     case 'listen.transcript':
       addMessage('YOU', ev.text, 'user');
       lastJarvis = null;
+      // He has moved on; whatever was on screen is about to be replaced or
+      // is no longer what he is asking about.
+      window.dispatchEvent(new Event('jarvis-user-spoke'));
       break;
 
     case 'listen.ready':
@@ -222,7 +242,6 @@ window.onJarvis = function (ev) {
 
     case 'speaking':
       addJarvis(ev.text);
-      showLastWord(ev.text);
       break;
 
     case 'tool':
@@ -368,116 +387,6 @@ window.addEventListener('pywebviewready', async () => {
   } catch (_) { /* ignore */ }
 });
 
-/* ══════════════════════════════════════════════════════════════
-   The panels around the reactor
-
-   Everything here is assembled in Python on the watch tick and arrives as
-   one 'hud' event every few seconds. This side only paints it -- see
-   jarvis/hud.py for why none of it is gathered on the thread that draws.
-
-   Values change in place and panels never reflow, which is the whole point
-   of the layout: after a week you glance at a position rather than reading
-   a label.
-   ══════════════════════════════════════════════════════════════ */
-
-function renderHud(h) {
-  // watches he is holding
-  const list = document.getElementById('watch-list');
-  list.innerHTML = '';
-  if (!h.watches || !h.watches.length) {
-    const e = document.createElement('div');
-    e.className = 'empty';
-    e.textContent = 'nothing at the moment';
-    list.appendChild(e);
-  } else {
-    for (const w of h.watches) {
-      const row = document.createElement('div');
-      row.className = 'item';
-      const pip = document.createElement('span');
-      pip.className = 'pip';
-      const label = document.createElement('span');
-      label.textContent = w;
-      row.append(pip, label);
-      list.appendChild(row);
-    }
-  }
-
-  if (h.context && h.context.summary) {
-    document.getElementById('context-line').textContent = h.context.summary;
-  }
-  if (h.facts != null) {
-    document.getElementById('v-facts').textContent =
-      `${h.facts} fact${h.facts === 1 ? '' : 's'}`;
-  }
-
-  // The seven-day memory trend. Below three days there is no shape to draw:
-  // a single value at flex:1 filled the whole strip and rendered as a solid
-  // block, which read as a bar at 100% rather than as one day of data.
-  const spark = document.getElementById('spark');
-  if (h.trend && h.trend.memory && h.trend.memory.length >= 3) {
-    spark.style.display = '';
-    const vals = h.trend.memory;
-    const top = Math.max(...vals, 1);
-    spark.innerHTML = '';
-    vals.forEach((v, i) => {
-      const bar = document.createElement('i');
-      bar.style.height = `${Math.max(4, (v / top) * 100)}%`;
-      if (i === vals.length - 1 && v >= 88) bar.classList.add('hi');
-      spark.appendChild(bar);
-    });
-  } else {
-    spark.style.display = 'none';
-  }
-  if (h.trend && h.trend.label) {
-    const note = document.getElementById('trend-note');
-    note.textContent = truncate(h.trend.label, 64);
-    note.classList.toggle('warn', /climb|higher|worse|rising/i.test(h.trend.label));
-  }
-
-  if (h.storage && h.storage.free_gb != null) {
-    document.getElementById('v-storage').textContent = `${h.storage.free_gb} GB free`;
-    const used = document.getElementById('g-storage');
-    used.style.width = `${h.storage.percent || 0}%`;
-    used.classList.toggle('crit', (h.storage.percent || 0) >= 92);
-  }
-
-  // identity, along the footer
-  const present = document.getElementById('f-present');
-  present.textContent = h.present ? 'yes' : 'away';
-  present.className = h.present ? 'yes' : 'no';
-  if (h.model) document.getElementById('f-model').textContent = h.model;
-  if (h.voice) document.getElementById('f-voice').textContent = h.voice;
-  if (h.tools != null) document.getElementById('f-tools').textContent = h.tools;
-  if (h.uptime_s != null) {
-    document.getElementById('f-uptime').textContent = fmtUptime(h.uptime_s);
-  }
-}
-
-function fmtUptime(s) {
-  if (s < 90) return `${Math.round(s)}s`;
-  if (s < 5400) return `${Math.round(s / 60)}m`;
-  const h = Math.floor(s / 3600);
-  return `${h}h ${Math.round((s - h * 3600) / 60)}m`;
-}
-
-/* ── the last thing he said ──────────────────────────────────────
-   The conversation is not the screen in this layout, so the most recent
-   line has to stay somewhere. It is replaced rather than appended: this is
-   the last thing, not a log. */
-const lastWordEl = document.getElementById('lastword');
-const lastWordBody = document.getElementById('lastword-body');
-let lastWordTimer = null;
-
-function showLastWord(text) {
-  if (!text) return;
-  lastWordBody.textContent = text;
-  lastWordEl.hidden = false;
-  clearTimeout(lastWordTimer);
-  // Long enough to read at a glance, short enough that a stale line does
-  // not sit there pretending to be current.
-  lastWordTimer = setTimeout(() => { lastWordEl.hidden = true; }, 45000);
-}
-
 /* ── the drawer ──────────────────────────────────────────────────
    The full transcript, out of the way until asked for. Tab opens it,
    Escape closes it, and typing anywhere opens it and starts the message --
@@ -515,3 +424,191 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
   }
 });
+
+/* ══════════════════════════════════════════════════════════════
+   The working panel
+
+   Empty until a tool says otherwise. Nothing here inspects results and
+   decides for itself -- Python asks for a specific kind of card, which is
+   what stops this becoming the old permanent dashboard again.
+
+   Two rules he set, and they are the whole design:
+
+     It fades. Twenty seconds after the last thing arrives, the panel goes
+     and the reactor takes the screen back. The empty screen is the point;
+     anything that stays forever defeats it.
+
+     It carries no transcript. His voice is already saying the words. What
+     goes here is the thing worth looking at, and nothing else.
+   ══════════════════════════════════════════════════════════════ */
+
+function fmtUptime(s) {
+  if (s < 90) return `${Math.round(s)}s`;
+  if (s < 5400) return `${Math.round(s / 60)}m`;
+  const h = Math.floor(s / 3600);
+  return `${h}h ${Math.round((s - h * 3600) / 60)}m`;
+}
+
+/* Uptime ticks here rather than arriving as a finished number once a minute,
+   which is how it managed to read "9s" for sixty seconds. */
+let startedAt = null;
+setInterval(() => {
+  if (startedAt == null) return;
+  const el = document.getElementById('f-uptime');
+  if (el) el.textContent = fmtUptime(Date.now() / 1000 - startedAt);
+}, 1000);
+
+const FADE_AFTER_MS = 20000;
+
+const panel = document.getElementById('panel');
+const panelBody = document.getElementById('panel-body');
+const panelKind = document.getElementById('panel-kind');
+const panelSrc = document.getElementById('panel-src');
+let fadeTimer = null;
+
+function hidePanel() {
+  clearTimeout(fadeTimer);
+  document.body.classList.remove('working');
+  // Let the slide finish before pulling it out of the layout, or the reactor
+  // jumps back to centre while the panel is still visibly on screen.
+  setTimeout(() => {
+    if (!document.body.classList.contains('working')) panel.hidden = true;
+  }, 700);
+}
+
+function armFade() {
+  clearTimeout(fadeTimer);
+  fadeTimer = setTimeout(hidePanel, FADE_AFTER_MS);
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+const RENDER = {
+  results(d) {
+    const out = [];
+    for (const item of (d.items || []).slice(0, 5)) {
+      const card = el('div', 'p-card');
+      card.append(el('div', 't', item.title || ''));
+      if (item.snippet) card.append(el('div', 's', item.snippet));
+      if (item.url) {
+        try {
+          card.append(el('div', 'u', new URL(item.url).hostname.replace(/^www\./, '')));
+        } catch { /* a malformed url is not worth a broken card */ }
+      }
+      out.push(card);
+    }
+    return out;
+  },
+
+  images(d) {
+    const grid = el('div', 'p-shots');
+    for (const item of (d.items || []).slice(0, 6)) {
+      const box = el('div', 'p-shot');
+      const img = new Image();
+      img.loading = 'lazy';
+      img.alt = item.title || '';
+      img.src = item.thumb;
+      // A dead thumbnail should leave a quiet empty tile, not a broken icon.
+      img.addEventListener('error', () => img.remove());
+      box.append(img);
+      grid.append(box);
+    }
+    return [grid];
+  },
+
+  status(d) {
+    const rows = el('div', 'p-rows');
+    const bar = (v, warn, crit) => {
+      const m = el('div', 'p-meter');
+      const i = el('i');
+      i.style.width = `${Math.min(v, 100)}%`;
+      if (v >= crit) i.classList.add('crit');
+      else if (v >= warn) i.classList.add('warn');
+      m.append(i);
+      return m;
+    };
+    const row = (label, value, cls) => {
+      const r = el('div', 'p-row');
+      r.append(el('span', null, label));
+      r.append(el('b', cls, value));
+      return r;
+    };
+    if (d.memory != null) {
+      rows.append(row('Memory', `${d.memory}%`,
+                      d.memory >= 92 ? 'crit' : d.memory >= 80 ? 'warn' : null));
+      rows.append(bar(d.memory, 80, 92));
+    }
+    if (d.cpu != null) { rows.append(row('Processor', `${d.cpu}%`)); rows.append(bar(d.cpu, 80, 92)); }
+    if (d.disk != null) { rows.append(row('Disk', `${d.disk}% used`)); rows.append(bar(d.disk, 85, 94)); }
+    if (d.battery != null) {
+      rows.append(row('Power', `${d.battery}%${d.charging ? ' · plugged in' : ''}`,
+                      !d.charging && d.battery <= 20 ? 'crit' : null));
+    }
+    return [rows];
+  },
+
+  weather(d) {
+    const wrap = el('div');
+    wrap.append(el('div', 'p-big', `${d.now}°`));
+    wrap.append(el('div', 'p-sub', `${d.sky} · feels like ${d.feels}°`));
+    const inline = el('div', 'p-inline');
+    for (const [k, v] of [['High', `${d.high}°`], ['Low', `${d.low}°`],
+                          ['Rain', `${d.rain}%`], ['Wind', `${d.wind} mph`]]) {
+      const cell = el('div', null, k);
+      cell.append(el('b', null, v));
+      inline.append(cell);
+    }
+    wrap.append(inline);
+    return [wrap];
+  },
+
+  playing(d) {
+    const wrap = el('div');
+    wrap.append(el('div', 'p-big', d.title || ''));
+    const bits = [d.artist, d.app].filter(Boolean).join(' · ');
+    if (bits) wrap.append(el('div', 'p-sub', bits));
+    return [wrap];
+  },
+
+  screen(d) { return [el('div', 'p-text', d.body || '')]; },
+  text(d)   { return [el('div', 'p-text', d.body || '')]; },
+};
+
+const KIND_LABEL = {
+  results: 'FOUND', images: 'SHOWING', status: 'SYSTEM',
+  weather: 'WEATHER', playing: 'PLAYING', screen: 'ON SCREEN', text: '',
+};
+
+function showPanel(ev) {
+  const render = RENDER[ev.kind];
+  if (!render) return;
+
+  let nodes;
+  try {
+    nodes = render(ev) || [];
+  } catch (err) {
+    // A malformed payload must not take the interface down with it.
+    console.warn('panel render failed', ev.kind, err);
+    return;
+  }
+  if (!nodes.length) return;
+
+  panelBody.replaceChildren(...nodes);
+  panelKind.textContent = KIND_LABEL[ev.kind] ?? '';
+  panelSrc.textContent = ev.title || '';
+
+  panel.hidden = false;
+  // A frame between unhiding and animating, or the transition has nothing to
+  // move from and the panel simply appears.
+  requestAnimationFrame(() => document.body.classList.add('working'));
+  armFade();
+}
+
+/* Anything he says next means he has moved on, so the old panel should not
+   sit there looking current. */
+window.addEventListener('jarvis-user-spoke', hidePanel);

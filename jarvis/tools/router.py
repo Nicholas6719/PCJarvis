@@ -119,6 +119,8 @@ EXTRAS: dict[str, set[str]] = {
     "get_trend":           {"has been", "this week", "usual", "lately",
                             "trend", "over time", "compared to"},
 
+    "show_images":            {"show me", "what does", "look like",
+                               "picture", "pictures", "photo", "image"},
     "search_site":            {"on amazon", "on youtube", "on ebay",
                                "on reddit", "search amazon",
                                "find me a", "look for", "a link to",

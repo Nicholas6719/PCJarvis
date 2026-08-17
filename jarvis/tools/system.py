@@ -316,6 +316,23 @@ def get_system_stats(component: str = "all") -> str:
         component: "cpu", "memory", "disk", "battery", or "all". If he asked
             about the CPU, pass "cpu" -- do not read out everything.
     """
+    # He asked, so show it. This is the only path that opens the system
+    # panel -- it used to sit on screen permanently whether it mattered or
+    # not, which is how it stopped being read.
+    try:
+        import psutil
+
+        from ..panel import show
+
+        battery = psutil.sensors_battery()
+        show('status',
+             memory=round(psutil.virtual_memory().percent),
+             cpu=round(psutil.cpu_percent(interval=None)),
+             battery=round(battery.percent) if battery else None,
+             charging=bool(battery.power_plugged) if battery else False,
+             disk=round(psutil.disk_usage('C:' + chr(92)).percent))
+    except Exception:
+        pass
     which = (component or "all").lower().strip()
     if which in ("ram", "mem"):
         which = "memory"
@@ -507,6 +524,18 @@ def read_screen(whole_screen: bool = False) -> str:
             everything returns fragments of the taskbar and every background
             window mixed together.
     """
+    # Whatever comes back goes on screen too. He is usually asking because
+    # the text is small or he cannot reach it, and reading it aloud does not
+    # help him check it against what is actually there.
+    def _show(text: str) -> None:
+        try:
+            from ..panel import show
+
+            body = (text or '').strip()
+            if len(body) > 40:
+                show('screen', body=body[:1200])
+        except Exception:
+            pass
     from ..screen import read, window_name
 
     text, problem = read(whole_screen=bool(whole_screen))
@@ -515,6 +544,7 @@ def read_screen(whole_screen: bool = False) -> str:
 
     where = window_name()
     where_line = f" (from {where})" if where else ""
+    _show(text)
     # Same shape as the web tools: hand him the material with an instruction
     # to answer from it, because reading a screenful of OCR aloud is useless.
     return (f"Text currently on screen{where_line}. Answer his question from "

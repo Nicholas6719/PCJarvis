@@ -176,7 +176,7 @@ INTENTS: list[Intent] = [
            "get_battery"),
     Intent(r"^(?:jarvis[,\s]+)?(?:am\s+i\s+)?(?:charging|plugged\s+in)"
            r"\s*[.?!]?$", "get_battery"),
-    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:my\s+)?system\s+"
+    Intent(r"^(?:jarvis[,\s]+)?(?:what(?:'s| is)\s+)?(?:my\s+|the\s+)?system\s+"
            r"(?:status|stats|info)\s*[.?!]?$",
            "get_system_stats", _component("all")),
     Intent(r"^(?:jarvis[,\s]+)?what\s+time\s+is\s+it\s*[.?!]?$", "get_time"),
@@ -273,6 +273,12 @@ INTENTS: list[Intent] = [
            "what_have_i_been_doing"),
     Intent(r"^(?:jarvis[,\s]+)?where\s+has\s+my\s+day\s+gone\s*[.?!]?$",
            "what_have_i_been_doing"),
+
+    # ══ showing him something ══
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?show\s+me\s+(?:some\s+|a\s+few\s+)?(?:pictures?|photos?|images?)\s+of\s+(?P<q>.+?)\s*[.!?]?$",
+           "show_images", lambda m: {"subject": m.group("q").strip()}),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+does\s+(?P<q>.+?)\s+look\s+like\s*[.?!]?$",
+           "show_images", lambda m: {"subject": m.group("q").strip()}),
 
     # ══ searching a particular site ══
     # He asked for an Amazon link to a specific comic and got the Amazon

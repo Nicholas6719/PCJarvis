@@ -22,42 +22,12 @@
   </div>
 </header>
 
+<!-- The reactor holds the screen on its own. Everything else arrives only
+     when there is something worth looking at, and leaves again. -->
 <main>
-  <!-- ── left: the machine ─────────────────────────────────────── -->
-  <section id="left" class="gutter">
-    <div class="metric">
-      <div class="metric-row"><label>MEMORY</label><span id="v-mem" class="metric-val">--</span></div>
-      <div class="bar"><i id="g-mem"></i></div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-row"><label>PROCESSOR</label><span id="v-cpu" class="metric-val">--</span></div>
-      <div class="bar"><i id="g-cpu"></i></div>
-    </div>
-
-    <div class="metric">
-      <div class="metric-row"><label>POWER</label><span id="v-bat" class="metric-val">--</span></div>
-      <div class="bar"><i id="g-bat"></i></div>
-      <span id="power-note" class="sub"></span>
-    </div>
-
-    <div class="metric">
-      <label>MEMORY &middot; 7 DAYS</label>
-      <div id="spark" class="spark" aria-hidden="true"></div>
-      <span id="trend-note" class="sub"></span>
-    </div>
-
-    <div class="metric push">
-      <label>STORAGE</label>
-      <div class="metric-row"><span id="v-storage" class="big">--</span></div>
-      <div class="bar"><i id="g-storage"></i></div>
-    </div>
-  </section>
-
-  <!-- ── centre: the reactor ───────────────────────────────────── -->
   <section id="centre">
     <div id="dial">
-      <canvas id="reactor" width="520" height="520"></canvas>
+      <canvas id="reactor" width="440" height="440"></canvas>
     </div>
 
     <div id="status">
@@ -69,58 +39,30 @@
       <span class="label">LISTENING &mdash; no wake word needed</span>
       <div class="track"><i id="convo-bar"></i></div>
     </div>
-
-    <!-- the last thing he said. Inside the centre column on purpose: the
-         CSS positions it against #centre, and as a sibling of <main> it
-         resolved against the viewport instead and sat on top of the
-         footer buttons. -->
-    <div id="lastword" hidden>
-      <span class="who">JARVIS</span>
-      <span id="lastword-body"></span>
-    </div>
   </section>
 
-  <!-- ── right: what he is holding ─────────────────────────────── -->
-  <section id="right" class="gutter">
-    <div class="metric">
-      <label>WATCHING FOR</label>
-      <div id="watch-list" class="list">
-        <div class="empty">nothing at the moment</div>
-      </div>
+  <!-- the working area -->
+  <aside id="panel" hidden>
+    <div class="panel-hd">
+      <span id="panel-kind"></span>
+      <span id="panel-src"></span>
     </div>
-
-    <div class="metric">
-      <label>WORKING ON</label>
-      <div id="context-line" class="big">&mdash;</div>
-    </div>
-
-    <div class="metric push">
-      <label>REMEMBERS</label>
-      <div class="metric-row"><span id="v-facts" class="big">--</span></div>
-      <span class="sub">Documents &middot; JARVIS &middot; Memory</span>
-    </div>
-  </section>
+    <div id="panel-body"></div>
+  </aside>
 </main>
 
-
 <footer id="foot">
-  <span class="pair"><label>AT THE DESK</label><b id="f-present">&mdash;</b></span>
-  <span class="pair"><label>MODEL</label><b id="f-model">&mdash;</b></span>
-  <span class="pair"><label>VOICE</label><b id="f-voice">&mdash;</b></span>
-  <span class="pair"><label>TOOLS</label><b id="f-tools">&mdash;</b></span>
   <span class="pair"><label>UP</label><b id="f-uptime">&mdash;</b></span>
-
   <div id="controls">
     <button id="btn-talk" class="primary" title="Push to talk"><span class="dot"></span>TALK</button>
     <button id="btn-mute" title="Mute microphone">MIC ON</button>
     <button id="btn-stop" title="Interrupt">STOP</button>
     <button id="btn-drawer" title="Conversation (Tab)">TRANSCRIPT</button>
   </div>
-
   <div id="ticker"></div>
 </footer>
 
-<!-- the conversation, out of the way until asked for -->
+<!-- the full conversation, out of the way until asked for -->
 <div id="drawer" hidden>
   <div class="drawer-head">
     <span>CONVERSATION</span>

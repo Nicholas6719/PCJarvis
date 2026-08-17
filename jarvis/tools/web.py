@@ -126,6 +126,8 @@ def web_search(query: str, count: int = 5) -> str:
     try:
         from ddgs import DDGS
 
+        from ..panel import show
+
         count = max(1, min(int(count), CONFIG.get("tools.web_result_count", 5)))
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=count))
@@ -145,6 +147,14 @@ def web_search(query: str, count: int = 5) -> str:
                     f"you could not find anything on this. Do NOT answer from "
                     f"the titles below.\n"
                     + "\n".join(f"- {r.get('title', '')}" for r in results[:3]))
+
+        # On screen as well as in his answer. He is about to compress these
+        # into two sentences, and the sources are worth seeing intact.
+        show("results", title=query,
+             items=[{"title": (r.get("title") or "")[:90],
+                     "snippet": (r.get("body") or "").replace(chr(10), " ")[:130],
+                     "url": r.get("href") or r.get("link") or ""}
+                    for r in results[:5]])
 
         header = (f"Search findings for '{query}' (summarise these in one or "
                   f"two spoken sentences; do NOT list them):")
@@ -296,6 +306,19 @@ def get_weather(location: str = "", when: str = "today") -> str:
         _last_place["name"] = name
         _last_place["at"] = time.time()
 
+        # Worth looking at as well as hearing -- a forecast is four numbers,
+        # and four numbers read aloud are gone the moment they are said.
+        from ..panel import show
+
+        show("weather", place=name,
+             now=round(cur["temperature_2m"]),
+             feels=round(cur["apparent_temperature"]),
+             sky=WEATHER_CODES.get(cur["weather_code"], "unclear skies"),
+             wind=round(cur["wind_speed_10m"]),
+             high=round(daily["temperature_2m_max"][0]),
+             low=round(daily["temperature_2m_min"][0]),
+             rain=round(daily["precipitation_probability_max"][0]))
+
         # Tomorrow has no "current" reading, so it is a forecast line only.
         if (when or "").lower().strip().startswith("tomorrow"):
             if len(daily["temperature_2m_max"]) < 2:
@@ -362,3 +385,43 @@ WEATHER_CODES = {
     86: "heavy snow showers", 95: "thunderstorms",
     96: "thunderstorms with hail", 99: "severe thunderstorms with hail",
 }
+
+
+@tool(category="web", speak_while_running=True)
+def show_images(subject: str, count: int = 6) -> str:
+    """Put pictures of something on screen.
+
+    Use when talking about anything worth seeing -- a film, a person, a place,
+    a product, a car. Call it as well as answering, not instead of: he wants to
+    look at the thing while you tell him about it.
+
+    Also use for "show me pictures of X", "what does X look like".
+
+    Args:
+        subject: What to show pictures of.
+        count: How many, up to eight.
+    """
+    subject = (subject or "").strip()
+    if not subject:
+        return "Of what?"
+    try:
+        from ddgs import DDGS
+
+        from ..panel import show
+
+        with DDGS() as ddgs:
+            found = list(ddgs.images(subject, max_results=max(1, min(int(count), 8))))
+        if not found:
+            return f"I could not find any pictures of {subject}."
+
+        show("images", title=subject,
+             items=[{"thumb": r.get("thumbnail") or r.get("image") or "",
+                     "title": (r.get("title") or "")[:70],
+                     "url": r.get("url") or r.get("image") or ""}
+                    for r in found if r.get("thumbnail") or r.get("image")])
+        # Deliberately terse. The pictures are the answer; saying how many
+        # there are adds nothing he cannot see.
+        return f"Showing {subject}."
+    except Exception as e:
+        log.debug("image search failed", exc_info=True)
+        return f"I could not fetch pictures of {subject}: {e}"
