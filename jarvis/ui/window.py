@@ -166,6 +166,11 @@ class Bridge:
         import time as _time
 
         log.info("SELFTEST: exercising window transitions")
+
+        # Nothing this drives is conversation. Recording it put "thank you,
+        # go to sleep" and "return to wake mode" at the top of the transcript
+        # he later exported to PDF, as though he had said them.
+        self.app.record_turns = False
         failures = 0
         for cycle in range(4):
             try:
@@ -261,6 +266,7 @@ class Bridge:
         log.info("SELFTEST: %s",
                  "PASSED -- no crash across 4 minimise/restore cycles"
                  if failures == 0 else f"FAILED with {failures} errors")
+        self.app.record_turns = True
         _time.sleep(0.5)
         self.stop()
 

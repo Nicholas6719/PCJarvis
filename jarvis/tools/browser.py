@@ -152,6 +152,118 @@ def _open(url: str, foreground: bool = True) -> bool:
     return True
 
 
+# Where a search actually lives on each site. YouTube had one of these and
+# nothing else did, which is why asking for a specific comic on Amazon
+# produced the Amazon homepage: the model had no way to express "search
+# Amazon", so it handed the whole sentence to open_website, which stripped it
+# back to a bare domain and opened that.
+SITE_SEARCH = {
+    "amazon":        "https://www.amazon.com/s?k={q}",
+    "youtube":       "https://www.youtube.com/results?search_query={q}",
+    "ebay":          "https://www.ebay.com/sch/i.html?_nkw={q}",
+    "google":        "https://www.google.com/search?q={q}",
+    "duckduckgo":    "https://duckduckgo.com/?q={q}",
+    "reddit":        "https://www.reddit.com/search/?q={q}",
+    "wikipedia":     "https://en.wikipedia.org/w/index.php?search={q}",
+    "github":        "https://github.com/search?q={q}",
+    "imdb":          "https://www.imdb.com/find/?q={q}",
+    "stackoverflow": "https://stackoverflow.com/search?q={q}",
+    "spotify":       "https://open.spotify.com/search/{q}",
+    "maps":          "https://www.google.com/maps/search/{q}",
+    "twitter":       "https://twitter.com/search?q={q}",
+    "x":             "https://twitter.com/search?q={q}",
+    "netflix":       "https://www.netflix.com/search?q={q}",
+    "bestbuy":       "https://www.bestbuy.com/site/searchpage.jsp?st={q}",
+    "walmart":       "https://www.walmart.com/search?q={q}",
+    "etsy":          "https://www.etsy.com/search?q={q}",
+}
+
+
+def _site_key(text: str) -> str:
+    """Which known site a phrase refers to, if any."""
+    low = (text or "").lower()
+    for name in SITE_SEARCH:
+        if name in low:
+            return name
+    return ""
+
+
+@tool(category="browser")
+def search_site(site: str, query: str) -> str:
+    """Search a particular website and show the results.
+
+    Use whenever he names a site and a thing: "find the Spider-Man comic on
+    Amazon", "search YouTube for the trailer", "look for that on eBay".
+    This is what to call instead of open_website when there is something
+    specific to look for -- open_website only opens a front page.
+
+    Args:
+        site: The site, e.g. "amazon", "youtube", "ebay", "reddit".
+        query: What to look for on it.
+    """
+    wanted = _site_key(site) or _site_key(query)
+    term = (query or "").strip()
+    if not term:
+        return "What should I look for?"
+
+    if not wanted:
+        # Unknown site: a site-scoped search on a real engine still puts him
+        # in front of the right results, which beats refusing.
+        domain = (site or "").strip().lower().replace(" ", "")
+        if not domain:
+            return search_in_browser(term)
+        if "." not in domain:
+            domain += ".com"
+        url = ("https://duckduckgo.com/?q="
+               + urllib.parse.quote(f"site:{domain} {term}"))
+        return (f"Searching {domain} for {term}." if _open(url)
+                else f"I could not open {domain}.")
+
+    url = SITE_SEARCH[wanted].format(q=urllib.parse.quote(term))
+    return (f"Here are the {wanted.capitalize()} results for {term}."
+            if _open(url) else f"I could not open {wanted}.")
+
+
+def _salvage_query(text: str, site: str) -> str:
+    """Pull a usable search term out of a sentence about a site.
+
+    What arrived was a whole product listing: "Amazon.com: The Amazing
+    Spider-Man Comic: Check each product page for other buying options.
+    Price and other details may vary based on product size and color."
+    Searching for all of that finds nothing, so the site name goes, the
+    listing boilerplate goes, and what is left is capped -- a search term
+    longer than a few words is noise rather than precision.
+
+    Written without a regex on purpose. The first version used one, a
+    stray escape put a control character in the pattern, and it silently
+    matched nothing at all while looking perfectly correct.
+    """
+    # Everything from here on is stock listing text, never the title.
+    noise = ("check each", "price and other", "may vary", "free delivery",
+             "in stock", "other buying", "product page", "see options",
+             "learn more", "shop now", "best seller")
+    lowered = text.lower()
+    cut = len(text)
+    for phrase in noise:
+        found = lowered.find(phrase)
+        if found > 0:
+            cut = min(cut, found)
+    trimmed = text[:cut]
+
+    words = []
+    for raw in trimmed.replace(":", " ").replace("|", " ").split():
+        token = raw.strip(" .,;")
+        if not token:
+            continue
+        low = token.lower()
+        if low == site or low.startswith(site + "."):
+            continue          # the site name is not part of the query
+        words.append(token)
+        if len(words) >= 8:
+            break
+    return " ".join(words).strip(" .,")
+
+
 @tool(category="browser")
 def open_website(site: str) -> str:
     """Open a website in the default browser.
@@ -161,6 +273,18 @@ def open_website(site: str) -> str:
     """
     key = _TRAIL.sub("", _LEAD.sub("", site.strip())).strip()
     key = key.lower().removeprefix("the ").strip(" .,")
+
+    # A whole sentence with a site name in it means he wants something ON that
+    # site, not its front page. This arrived once as "Amazon.com: The Amazing
+    # Spider-Man Comic: Check each product page for other buying options",
+    # which was truncated to "amazon.com" and opened the homepage -- twice,
+    # because the second attempt did exactly the same thing.
+    if len(key) > 28 and " " in key:
+        known = _site_key(key)
+        if known:
+            salvaged = _salvage_query(key, known)
+            if salvaged:
+                return search_site(known, salvaged)
 
     url = SITES.get(key)
     if not url:

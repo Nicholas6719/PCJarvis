@@ -146,6 +146,10 @@ class Jarvis:
         self.speaker: Speaker | None = None
         self.listener: Listener | None = None
         self._chime = None
+        # A diagnostic drives real turns through handle(). Without this
+        # they are recorded as conversation, and his exported PDF opened
+        # with two exchanges that never happened.
+        self.record_turns = True
         self._turn: asyncio.Task | None = None
         self._interrupted = False
         self._last_proactive = ""
@@ -360,7 +364,8 @@ class Jarvis:
         # expires it mid-answer and he drops to wake mode while still speaking.
         self.listener.suspend_conversation()
         if self.memory:
-            self.memory.log_turn("user", text)
+            if self.record_turns:
+                self.memory.log_turn("user", text)
 
         # "Shut down" -- close the application. Checked before dismissal, since
         # the two share courtesy prefixes and this is the stronger instruction.
@@ -426,7 +431,8 @@ class Jarvis:
 
                 elif event.type == "done":
                     if event.text and self.memory:
-                        self.memory.log_turn("assistant", event.text)
+                        if self.record_turns:
+                            self.memory.log_turn("assistant", event.text)
                     await BUS.emit("reply", text=event.text)
 
                 elif event.type == "error":

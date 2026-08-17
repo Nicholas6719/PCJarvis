@@ -274,6 +274,16 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?where\s+has\s+my\s+day\s+gone\s*[.?!]?$",
            "what_have_i_been_doing"),
 
+    # ══ searching a particular site ══
+    # He asked for an Amazon link to a specific comic and got the Amazon
+    # front page, twice. These make the common phrasings unambiguous.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:search|look)\s+(?:on\s+|in\s+)?(?P<site>amazon|youtube|ebay|reddit|wikipedia|github|imdb|netflix|etsy|walmart|spotify)\s+for\s+(?P<q>.+?)\s*[.!?]?$",
+           "search_site",
+           lambda m: {"site": m.group("site"), "query": m.group("q").strip()}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:find|get|show)\s+me\s+(?P<q>.+?)\s+on\s+(?P<site>amazon|youtube|ebay|reddit|wikipedia|github|imdb|netflix|etsy|walmart|spotify)\s*[.!?]?$",
+           "search_site",
+           lambda m: {"site": m.group("site"), "query": m.group("q").strip()}),
+
     # ══ teaching him a word ══
     Intent(r"^(?:jarvis[,\s]+)?(?:the\s+word\s+is|learn\s+the\s+(?:word|name))\s+(?P<w>[\w'-]+)\s*[.!]?$",
            "learn_word", lambda m: {"word": m.group("w")}),

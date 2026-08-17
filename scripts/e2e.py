@@ -192,6 +192,44 @@ async def turn(app, rec: Recorder, text: str) -> tuple[str, list[str], float]:
 # ══════════════════════════════════════════════════════════════════
 #  Tests
 # ══════════════════════════════════════════════════════════════════
+async def test_site_search(app, rec) -> None:
+    """Asking for something on a named site must search it, not open it.
+
+    He asked for an Amazon link to a specific comic and got the Amazon front
+    page. Twice -- the second attempt did exactly the same thing, because
+    there was no tool that could express "search Amazon" and open_website
+    stripped the request back to a bare domain.
+    """
+    print("\n[site search] a named site plus a thing to find")
+
+    import jarvis.tools.browser as browser
+
+    opened: list = []
+    real_open = browser._open
+    browser._open = lambda url, foreground=True: opened.append(url) or True
+    try:
+        said, tools, _ = await turn(
+            app, rec, "search amazon for the amazing spider-man comic")
+        check("routed to a site search", "search_site" in tools, str(tools))
+        check("and it is an Amazon SEARCH, not the front page",
+              bool(opened) and "/s?k=" in opened[-1],
+              opened[-1][:70] if opened else "nothing opened")
+        check("carrying what he asked for",
+              bool(opened) and "spider" in opened[-1].lower(),
+              opened[-1][:70] if opened else "")
+
+        # And the exact string that defeated it the first time.
+        opened.clear()
+        browser.open_website(
+            "Amazon.com: The Amazing Spider-Man Comic: Check each product "
+            "page for other buying options. Price and other details may vary")
+        check("a listing sentence is salvaged into a search",
+              bool(opened) and "/s?k=" in opened[-1],
+              opened[-1][:70] if opened else "nothing opened")
+    finally:
+        browser._open = real_open
+
+
 async def test_follow_up_still_calls_a_tool(app, rec) -> None:
     """The follow-up he answered most confidently, and most wrongly.
 
@@ -481,6 +519,7 @@ async def main() -> int:
         await test_deterministic_speed(app, rec)
         await test_accuracy(app, rec)
         await test_conversation_state(app, rec)
+        await test_site_search(app, rec)
         await test_follow_up_still_calls_a_tool(app, rec)
         await test_ambient_watch(app, rec)
         await test_dismiss_and_shutdown(app, rec)

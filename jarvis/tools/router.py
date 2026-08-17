@@ -119,6 +119,10 @@ EXTRAS: dict[str, set[str]] = {
     "get_trend":           {"has been", "this week", "usual", "lately",
                             "trend", "over time", "compared to"},
 
+    "search_site":            {"on amazon", "on youtube", "on ebay",
+                               "on reddit", "search amazon",
+                               "find me a", "look for", "a link to",
+                               "link for", "on the site"},
     "search_documents":       {"what did i write", "my notes on",
                                "did i write", "anything about",
                                "find my notes"},

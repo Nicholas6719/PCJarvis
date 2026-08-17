@@ -228,6 +228,16 @@ def get_weather(location: str = "", when: str = "today") -> str:
             to answer it, the model invented a forecast and stated it as fact,
             which is why this argument exists.
     """
+    # "What's the weather for me?" put location="Me" through the geocoder,
+    # which duly found somewhere called Me and reported its weather with total
+    # confidence -- 81 degrees and 95% rain, for a place he has never been.
+    # None of these are places.
+    if location.strip().lower().strip(" .,?") in {
+            "me", "my location", "my area", "here", "my place", "current",
+            "current location", "my city", "us", "my position", "local",
+            "where i am", "where i live", "home", "my home"}:
+        location = ""
+
     try:
         with httpx.Client(timeout=15.0, headers={"User-Agent": UA}) as client:
             if location.strip():
