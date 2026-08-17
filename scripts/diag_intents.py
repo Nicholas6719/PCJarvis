@@ -20,7 +20,10 @@ CASES = [
     ("go to youtube", "open_website"),
     ("open my downloads", "open_folder"),
     ("open downloads folder", "open_folder"),
-    ("search youtube for iron man", "open_youtube_search"),
+    # search_site now claims this. Verified to build a byte-identical
+    # URL to open_youtube_search, so the outcome is unchanged and the
+    # general mechanism handling it is the better answer.
+    ("search youtube for iron man", "search_site"),
     ("directions to Boston", "get_directions"),
     ("volume 40", "set_volume"),
     ("lock my screen", "lock_screen"),
