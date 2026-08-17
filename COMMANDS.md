@@ -138,6 +138,17 @@ he already said while you were sitting there.
 Most returns produce silence, because most of the time nothing happened.
 Switch it off with `presence: enabled: false`.
 
+**The camera is off.** There is an optional check that covers the keyboard's
+one blind spot — reading on screen for twenty minutes looks identical to an
+empty chair. It ships disabled and stays that way until you set
+`camera: enabled: true` yourself.
+
+If you ever turn it on: it takes one frame at the moment he would otherwise
+write you off, counts whether any face is in view, and discards the frame. It
+cannot tell whose face and does not recognise anyone. Nothing is written to
+disk. At most one check every four minutes, every check written to the log,
+and the camera light comes on while it is in use.
+
 ### About himself
 **"how long have you been running?"** · **"how much memory are you using?"** ·
 **"what model are you?"** · **"tell me about yourself"**

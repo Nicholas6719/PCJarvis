@@ -80,18 +80,38 @@ class Presence:
 
         if self._present:
             if idle >= threshold:
+                if self._camera_says_present():
+                    return          # sitting there reading, not gone
                 self._present = False
                 # He went quiet when the idle clock started, not now.
                 self._left_at = time.time() - idle
                 log.info("he appears to have stepped away")
             return
 
-        # Away. Any input at all means he is back.
+        # Away by the keyboard. If the camera check is switched on, ask it
+        # once before settling on that -- reading on screen for twenty minutes
+        # is indistinguishable from an empty chair, and this is the only thing
+        # that can tell them apart. Off by default; see jarvis/camera.py.
         if idle < threshold:
             self._present = True
             self._returned = True
             log.info("he is back after %.0f minutes",
                      (time.time() - self._left_at) / 60 if self._left_at else 0)
+
+    def _camera_says_present(self) -> bool:
+        """Only ever consulted at the moment he would be written off.
+
+        Returns False unless the camera positively saw someone, so an
+        unavailable camera, a disabled one, or any error at all leaves the
+        keyboard in charge rather than silently changing the answer.
+        """
+        try:
+            from . import camera
+
+            return camera.looks_present(self.cfg) is True
+        except Exception:
+            log.debug("camera check failed", exc_info=True)
+            return False
 
     def take_return(self) -> bool:
         """True exactly once per return, so a briefing cannot repeat."""

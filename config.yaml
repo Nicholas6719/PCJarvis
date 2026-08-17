@@ -146,6 +146,19 @@ presence:
   enabled: true
   away_after_s: 300         # five minutes of no keyboard or mouse
 
+# The camera. OFF, and it stays off until you set this yourself.
+#
+# What it does when enabled: at the moment the keyboard would conclude you have
+# left, it takes one frame, counts whether any face is in view, and discards
+# the frame. It cannot tell whose face, does not recognise anyone, and never
+# writes an image anywhere. Every check is written to the log.
+#
+# Why it exists: reading something on screen for twenty minutes looks exactly
+# like an empty chair to a keyboard, and this is the only thing that can tell
+# those apart. The camera light will come on while it is in use.
+camera:
+  enabled: false
+
 watch:
   enabled: true
   interval_s: 60           # how often he looks; nothing is said most times
