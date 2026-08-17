@@ -36,9 +36,19 @@ import { Reactor } from './reactor.js';
 const reactor = new Reactor(document.getElementById('reactor'));
 let bootProgress = 0;
 
-function frame() {
-  reactor.draw();
+/* The reactor is ambient motion, not a game. Drawing it 60 times a second
+   costs twice what 30 does and looks the same -- and while the window is
+   minimised to wake mode, which is most of the day, it should cost nothing
+   at all. shadowBlur in particular is expensive enough that this matters. */
+const FRAME_MS = 1000 / 30;
+let lastFrame = 0;
+
+function frame(now) {
   requestAnimationFrame(frame);
+  if (document.hidden) return;
+  if (now - lastFrame < FRAME_MS) return;
+  lastFrame = now;
+  reactor.draw();
 }
 requestAnimationFrame(frame);
 

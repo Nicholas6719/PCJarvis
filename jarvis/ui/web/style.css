@@ -282,12 +282,17 @@ body                         { --accent: var(--cyan); }
     transparent 100%);
   background-size: 100% 240px;
   background-repeat: no-repeat;
+  height: 240px; inset: -240px 0 auto 0;
   animation: scan 7s linear infinite;
   opacity: .55;
+  will-change: transform;
 }
+/* Animating background-position repainted the whole 1920x1200 window on every
+   frame. Translating a 240px-tall strip instead is handled by the compositor
+   and costs essentially nothing. It looks identical. */
 @keyframes scan {
-  from { background-position: 0 -240px; }
-  to   { background-position: 0 100vh; }
+  from { transform: translateY(0); }
+  to   { transform: translateY(calc(100vh + 240px)); }
 }
 
 /* corner brackets that breathe with the state */
@@ -499,8 +504,12 @@ main {
 }
 #dial { flex: 0 1 auto; display: grid; place-items: center; min-height: 0; }
 #reactor {
-  width: min(46vh, 100%); height: min(46vh, 100%);
-  max-width: 460px; max-height: 460px;
+  /* Measured: at 460px this was 2.35x the composited area of the old 300px
+     reactor, on top of 1.4x more canvas pixels to draw -- every frame, at
+     60fps, on an iGPU that is also holding a 7B model. It is still clearly
+     the centrepiece at 380. */
+  width: min(38vh, 100%); height: min(38vh, 100%);
+  max-width: 380px; max-height: 380px;
 }
 #status { margin-top: 2px; }
 
