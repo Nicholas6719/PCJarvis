@@ -260,6 +260,54 @@ class Bridge:
             failures += 1
             log.exception('SELFTEST: file paths FAILED')
 
+        # click_button depends on pywinauto's dynamic comtypes bindings for
+        # UI Automation, which is exactly the kind of runtime code generation
+        # PyInstaller is known to mishandle. Proven correct against source
+        # already -- seven, plus, three, equals, verified by reading 7+3=10
+        # back off the real Calculator -- but that proves nothing about
+        # whether the frozen exe's bundled comtypes can do the same thing.
+        try:
+            import subprocess
+
+            from ..tools.interact import click_button
+
+            subprocess.Popen(["calc.exe"])
+            await asyncio.sleep(2.0)
+
+            for digit in ("seven", "plus", "three", "equals"):
+                said = await asyncio.to_thread(click_button, digit, "calc")
+                log.info("SELFTEST: click_button(%r) -> %s", digit, said)
+                if not said.startswith("Clicked"):
+                    failures += 1
+                    log.error("SELFTEST: click_button(%r) did not click "
+                             "anything", digit)
+                await asyncio.sleep(0.3)
+
+            from ..tools.interact import list_clickable
+
+            seen = await asyncio.to_thread(list_clickable, "calc")
+            if "10" not in seen and "Ten" not in seen:
+                # The result is not a named control, so read it back through
+                # the same OCR path a real question would use -- the honest
+                # end-to-end check rather than trusting the click alone.
+                # Calculator is the foreground window at this point, so the
+                # default (whole_screen=False) reads exactly that.
+                from ..tools.system import read_screen
+
+                text = await asyncio.to_thread(read_screen)
+                if "10" not in text:
+                    failures += 1
+                    log.error("SELFTEST: expected 7+3=10 on screen, "
+                             "read: %s", text[:200])
+                else:
+                    log.info("SELFTEST: confirmed 7+3=10 on screen via OCR")
+
+            subprocess.run(["taskkill", "/F", "/IM", "CalculatorApp.exe"],
+                          capture_output=True)
+        except Exception:
+            failures += 1
+            log.exception("SELFTEST: click_button FAILED")
+
         # And the state the interface reports must match reality.
         log.info("SELFTEST: minimized=%s fullscreen_active=%s",
                  self.channel.minimized, self.channel.fullscreen_active)

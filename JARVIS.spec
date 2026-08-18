@@ -21,7 +21,8 @@ hiddenimports = []
 for pkg in ("openwakeword", "kokoro_onnx", "espeakng_loader", "phonemizer_fork",
             "language_tags", "csvw", "rdflib", "segments",
             "fastembed", "faster_whisper", "onnxruntime", "ctranslate2",
-            "tokenizers", "trafilatura", "ddgs", "winsdk", "pycaw", "comtypes"):
+            "tokenizers", "trafilatura", "ddgs", "winsdk", "pycaw", "comtypes",
+            "pywinauto"):
     try:
         d, b, h = collect_all(pkg)
         datas += d
