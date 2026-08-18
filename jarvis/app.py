@@ -13,6 +13,7 @@ does not:
 """
 from __future__ import annotations
 
+import asyncio
 import ctypes
 import multiprocessing
 import os
@@ -124,20 +125,27 @@ def main() -> int:
         return 1
 
     try:
-        from jarvis.main import setup_logging
+        from jarvis.main import amain, build_arg_parser, setup_logging
         from jarvis.config import CONFIG
-        from jarvis.ui.window import run_windowed
 
         setup_logging(CONFIG.get("system.log_level", "INFO"))
 
-        class Args:
-            no_ui = False
-            quiet = "--quiet" in sys.argv
-            say = None
-            ask = None
-            selftest = "--selftest" in sys.argv
+        # The same flags jarvis.main's CLI takes, plus --selftest: a
+        # packaged-app-only diagnostic (see ui/window.py's Bridge.run) that
+        # has no place in the plain command-line entry point.
+        parser = build_arg_parser()
+        parser.add_argument("--selftest", action="store_true",
+                            help="exercise window transitions, then exit")
+        args = parser.parse_args()
 
-        return run_windowed(Args())
+        if args.no_ui or args.say or args.ask:
+            try:
+                return asyncio.run(amain(args))
+            except KeyboardInterrupt:
+                return 0
+
+        from jarvis.ui.window import run_windowed
+        return run_windowed(args)
 
     except Exception:
         import traceback
