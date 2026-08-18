@@ -308,6 +308,70 @@ class Bridge:
             failures += 1
             log.exception("SELFTEST: click_button FAILED")
 
+        # The web-page half rests on websocket-client actually working once
+        # frozen, which is exactly the same category of risk pywinauto's
+        # comtypes bindings were -- unverified until proven against the real
+        # exe. Proven correct against source already: found a real link by
+        # its visible text on a live Wikipedia page, scrolled it into view,
+        # clicked it with a synthetic mouse event through the DevTools
+        # protocol, and confirmed by reading the URL back afterward that it
+        # had actually navigated.
+        try:
+            from .. import browsing
+
+            opened = await asyncio.to_thread(
+                browsing.navigate, "https://en.wikipedia.org/wiki/Spider-Man")
+            if not opened:
+                failures += 1
+                log.error("SELFTEST: could not open the managed browser")
+            else:
+                await asyncio.sleep(2.0)
+                clicked = await asyncio.to_thread(
+                    browsing.find_and_click, "Marvel Comics")
+                log.info("SELFTEST: find_and_click('Marvel Comics') -> %s",
+                         clicked)
+                await asyncio.sleep(1.5)
+                url = await asyncio.to_thread(browsing.current_url)
+                if url and "Marvel_Comics" in url:
+                    log.info("SELFTEST: confirmed navigation via CDP -- %s",
+                             url)
+                else:
+                    failures += 1
+                    log.error("SELFTEST: expected the Marvel_Comics page, "
+                             "landed on %s", url)
+
+            # The refusal has to hold on a real click attempt too, not just
+            # the regex in isolation -- but Wikipedia has no "Buy Now" button
+            # to test it against, and asserting on one that might not exist
+            # would make this test meaningless. A page written here, rather
+            # than a real site, is guaranteed to have exactly the button
+            # being tested against regardless of what any real site does
+            # with its own layout tomorrow.
+            test_page = ("data:text/html,<button>Buy Now</button>"
+                        "<button>Learn more</button>")
+            if await asyncio.to_thread(browsing.navigate, test_page):
+                await asyncio.sleep(1.0)
+                refused = await asyncio.to_thread(
+                    browsing.find_and_click, "Buy Now")
+                if "will not click" not in refused:
+                    failures += 1
+                    log.error("SELFTEST: 'Buy Now' was not refused: %s",
+                             refused)
+                else:
+                    log.info("SELFTEST: 'Buy Now' correctly refused")
+
+                allowed = await asyncio.to_thread(
+                    browsing.find_and_click, "Learn more")
+                if not allowed.startswith("Clicked"):
+                    failures += 1
+                    log.error("SELFTEST: an ordinary button was refused: %s",
+                             allowed)
+        except Exception:
+            failures += 1
+            log.exception("SELFTEST: web click FAILED")
+        finally:
+            await asyncio.to_thread(browsing.close)
+
         # And the state the interface reports must match reality.
         log.info("SELFTEST: minimized=%s fullscreen_active=%s",
                  self.channel.minimized, self.channel.fullscreen_active)

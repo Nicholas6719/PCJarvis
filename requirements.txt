@@ -39,6 +39,7 @@ keyboard>=0.13.5
 winsdk>=1.0.0b10
 pillow>=10.3
 pywinauto>=0.6.8              # UI Automation: naming and clicking real controls
+websocket-client>=1.8         # DevTools protocol: clicking inside a web page
 
 # Memory: semantic recall (ONNX, CPU) — FTS5 keyword search is stdlib
 fastembed>=0.6

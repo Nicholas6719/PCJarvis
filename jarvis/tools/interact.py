@@ -15,12 +15,11 @@ The other half of the design is what NOT to click. A misheard word landing on
 "Delete Account" or "Buy Now" is real damage in a way that a wrong Spotify
 track is not, so anything that reads as a purchase or a destructive action is
 refused outright -- not cautioned about and then done anyway, the way a
-shutdown is. See _looks_dangerous.
+shutdown is. See jarvis.refusals.
 """
 from __future__ import annotations
 
 import logging
-import re
 
 from .registry import tool
 
@@ -31,15 +30,10 @@ log = logging.getLogger("jarvis.tools.interact")
 _CLICKABLE = ("Button", "Hyperlink", "MenuItem", "TabItem",
               "CheckBox", "RadioButton", "SplitButton", "ListItem")
 
-# Refused outright, never merely cautioned about. A control whose own name
-# contains one of these is doing something with real consequences -- spending
-# money, deleting an account, discarding work -- and the cost of a wrong click
-# here is categorically worse than the cost of a wrong click on "shuffle".
-_DANGEROUS = re.compile(
-    r"\b(buy|purchase|order now|place order|pay|checkout|confirm payment|"
-    r"subscribe|delete|remove account|deactivate|uninstall|format|erase|"
-    r"empty trash|discard|unsubscribe|cancel subscription|"
-    r"close without saving|don't save)\b", re.I)
+# Shared with jarvis.browsing -- a wrong click has the same real-world
+# consequence whether it lands on a native control or a web element, and
+# two separate copies of this list invite them to drift apart.
+from ..refusals import DANGEROUS as _DANGEROUS
 
 
 def _foreground_window():
@@ -63,6 +57,21 @@ def _named_window(app: str):
         title = (w.window_text() or "")
         if needle in title.lower() and "J.A.R.V.I.S" not in title:
             return w
+
+
+def _looks_like_a_browser(window) -> bool:
+    """Any Chromium/Firefox-family window, ours or not.
+
+    Reusing browser.py's own name list rather than a second copy that could
+    silently stop matching a new Edge title format or similar.
+    """
+    try:
+        from .browser import BROWSERS
+
+        title = (window.window_text() or "").lower()
+        return any(b in title for b in BROWSERS)
+    except Exception:
+        return False
     raise LookupError(f"no window matching {app!r}")
 
 
@@ -110,17 +119,29 @@ def _best_match(text: str, controls: list) -> tuple:
 
 @tool(category="system")
 def click_button(text: str, app: str = "") -> str:
-    """Click a button, link or control in a Windows application, by its name.
+    """Click a button, link or control -- in a native application, or on a
+    web page if JARVIS's own browser is what is in front right now.
 
-    Native applications only -- not content inside a web page. A browser's
-    own tabs, address bar and window controls are reachable; the page it is
-    showing is not, and asking for something on a web page should use search
-    or open_website instead of this.
+    Windows own accessibility layer cannot see a web page's actual content
+    (confirmed: it found zero links on a real page), so a page open in his
+    ordinary browser is not reachable this way. A page opened through
+    search_site or open_website, in JARVIS's own browser window, is.
 
     Args:
-        text: The name of the button or control, as it reads on screen.
+        text: The name of the button, link or control, as it reads on screen.
         app: Which application. Leave empty for whatever is in front.
     """
+    if not app.strip():
+        try:
+            from ..browsing import is_foreground
+
+            if is_foreground():
+                from ..browsing import find_and_click
+
+                return find_and_click(text)
+        except Exception:
+            log.debug("could not check for the managed browser", exc_info=True)
+
     try:
         window = _named_window(app) if app.strip() else _foreground_window()
     except LookupError as e:
@@ -128,6 +149,17 @@ def click_button(text: str, app: str = "") -> str:
     except Exception as e:
         log.exception("could not reach the window")
         return f"I could not look at that window: {e}"
+
+    if _looks_like_a_browser(window):
+        # Reaching here means the CDP path above was not taken -- either this
+        # is not JARVIS's own browser, or it did not currently have focus.
+        # Scanning it anyway would answer with the browser's OWN toolbar:
+        # asked to click "sign in" on Amazon, this silently found Brave's own
+        # account button instead and reported it clicked, which is a worse
+        # failure than admitting it cannot see the page.
+        return ("I cannot see the content of that page -- only pages opened "
+                "through me can be clicked into. Try asking me to search for "
+                "it first.")
 
     try:
         controls = _clickable(window)

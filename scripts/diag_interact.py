@@ -59,14 +59,24 @@ print("\n[refusal] the list a misheard word must never cross")
 must_refuse = ["Buy Now", "Place Order", "Confirm Payment", "Delete Account",
               "Uninstall", "Format", "Empty Trash", "Discard changes",
               "Unsubscribe", "Cancel subscription", "Delete",
-              "Close without saving"]
+              "Close without saving",
+              # Found by testing against Amazon's real page, not by guessing:
+              # the first version of this list refused Buy Now but let "Add
+              # to Cart" straight through, which is the far more common
+              # button and the one that actually got clicked.
+              "Add to Cart", "Add to cart", "Add to Bag", "Add to Basket",
+              "Redeem", "Apply Coupon"]
 for name in must_refuse:
     check(f"refuses {name!r}", bool(_DANGEROUS.search(name)))
 
 print("\n[safe] ordinary controls a real app is full of")
 must_allow = ["Save", "Cancel", "Next", "OK", "Seven", "Submit search",
              "Clear all memory", "Settings", "Play", "Pause", "Close",
-             "Minimize", "Send"]
+             "Minimize", "Send",
+             # Web-page controls that must stay click-able despite sitting
+             # right next to the dangerous ones above.
+             "Sign in", "Add to wishlist", "Add to list", "Save for later",
+             "See more results", "Next page"]
 for name in must_allow:
     check(f"allows {name!r}", not _DANGEROUS.search(name))
 

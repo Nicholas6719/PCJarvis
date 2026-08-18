@@ -202,10 +202,22 @@ async def test_site_search(app, rec) -> None:
     """
     print("\n[site search] a named site plus a thing to find")
 
+    import jarvis.browsing as browsing
     import jarvis.tools.browser as browser
 
+    # search_site opens into JARVIS's own managed browser now, not the
+    # ordinary one _open() reaches -- that is the whole point of today's
+    # feature, since only a page opened that way can be clicked into
+    # afterward. A real e2e run should not spawn an actual Brave process just
+    # to check which URL was asked for, so the capture point moves to where
+    # the URL is actually decided; a genuinely failed launch still falls
+    # through to _open(), which stays mocked as the fallback path.
     opened: list = []
+    real_navigate = browsing.navigate
+    real_bring_to_front = browsing.bring_to_front
     real_open = browser._open
+    browsing.navigate = lambda url: opened.append(url) or True
+    browsing.bring_to_front = lambda: True
     browser._open = lambda url, foreground=True: opened.append(url) or True
     try:
         said, tools, _ = await turn(
@@ -227,6 +239,8 @@ async def test_site_search(app, rec) -> None:
               bool(opened) and "/s?k=" in opened[-1],
               opened[-1][:70] if opened else "nothing opened")
     finally:
+        browsing.navigate = real_navigate
+        browsing.bring_to_front = real_bring_to_front
         browser._open = real_open
 
 

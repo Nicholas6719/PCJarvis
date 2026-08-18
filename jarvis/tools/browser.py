@@ -152,6 +152,34 @@ def _open(url: str, foreground: bool = True) -> bool:
     return True
 
 
+def _open_to_interact(url: str) -> bool:
+    """Open somewhere he can be asked to click something afterward.
+
+    _open() launches his ordinary browser -- his own logins, gone the moment
+    a purchase would be needed rather than an assistant defaulting to being
+    able to buy things. This is the other one: JARVIS's own browser, kept
+    open across calls, that click_button can actually reach through the
+    DevTools protocol. Windows own accessibility layer cannot see a page's
+    content at all regardless of which browser shows it -- confirmed
+    directly, zero links found on a real page -- so this is the only one of
+    the two that anything can click into afterward.
+
+    Falls back to the ordinary browser if the managed one cannot start for
+    any reason, so a missing Brave install degrades to today's behaviour
+    rather than a failure he has never seen before.
+    """
+    try:
+        from .. import browsing
+
+        if browsing.navigate(url):
+            threading.Thread(target=browsing.bring_to_front,
+                            daemon=True).start()
+            return True
+    except Exception:
+        log.debug("managed browser unavailable, falling back", exc_info=True)
+    return _open(url)
+
+
 # Where a search actually lives on each site. YouTube had one of these and
 # nothing else did, which is why asking for a specific comic on Amazon
 # produced the Amazon homepage: the model had no way to express "search
@@ -220,7 +248,7 @@ def search_site(site: str, query: str) -> str:
                 else f"I could not open {domain}.")
 
     url = SITE_SEARCH[wanted].format(q=urllib.parse.quote(term))
-    opened = _open(url)
+    opened = _open_to_interact(url)
 
     # Cards on screen as well as the real page in his browser. Drawn from a
     # site-scoped search rather than by embedding the site: Amazon sends no
@@ -469,6 +497,16 @@ def current_page() -> str:
 
     Use for "what page am I on", "what am I looking at", "what site is this".
     """
+    try:
+        from .. import browsing
+
+        if browsing.is_foreground():
+            url = browsing.current_url()
+            if url:
+                return f"You are on {url}."
+    except Exception:
+        log.debug("could not check the managed browser", exc_info=True)
+
     try:
         import pygetwindow as gw
 
