@@ -256,7 +256,8 @@ class Jarvis:
 
         # The part of him that speaks first. It only observes here;
         # nothing is said until run() starts its loop.
-        self.watcher = Watcher(self.cfg, state_getter=lambda: self.state)
+        self.watcher = Watcher(self.cfg, state_getter=lambda: self.state,
+                               brain=self.brain)
 
         self.mic.start()
 

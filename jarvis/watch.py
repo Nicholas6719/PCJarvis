@@ -57,7 +57,9 @@ class _Gate:
 class Watcher:
     """Watches quietly, speaks rarely."""
 
-    def __init__(self, cfg, state_getter=None):
+    def __init__(self, cfg, state_getter=None, brain=None):
+        # Held only to keep the prompt prefix hot. See _keep_warm.
+        self.brain = brain
         self.cfg = cfg
         self.presence = presence.Presence(cfg)
         self._state_getter = state_getter
@@ -290,6 +292,31 @@ class Watcher:
         self._rearm("long_session")
         return [got]
 
+    async def _keep_warm(self) -> None:
+        """Keep the prompt prefix cached, but only while he is here.
+
+        The prefix is about 5,300 tokens and evaluates at 99 tokens a second
+        on this machine, so meeting it cold costs 45 seconds. It goes cold
+        when Ollama unloads the model after its keep-alive, which is exactly
+        what happens if he steps away for twenty minutes -- and then his
+        first question back is the slowest one of the day.
+
+        So it is refreshed while he is at the desk and left to expire when he
+        is not, which frees the model's four gigabytes when nobody is using
+        it. Coming back re-warms it before he has finished sitting down.
+        """
+        if self.brain is None or not self.presence.present():
+            return
+        idle = self.brain.seconds_since_use()
+        if idle < self.cfg.get('llm.keep_warm_after_s', 480):
+            return
+        try:
+            log.info('refreshing the prompt cache after %.0f minutes idle',
+                     idle / 60)
+            await self.brain.warm()
+        except Exception:
+            log.debug('keep-warm failed', exc_info=True)
+
     # ── the loop ───────────────────────────────────────────────────
     def _collect(self) -> list[Observation]:
         found: list[Observation] = []
@@ -421,6 +448,7 @@ class Watcher:
         while self._running:
             try:
                 self.presence.update()
+                await self._keep_warm()
 
                 # The interface repaints from a writer thread that also
                 # drives the level meter at 30Hz, with the audio pipeline
@@ -428,6 +456,9 @@ class Watcher:
                 # microphone, so it is gathered here and merely copied there.
                 hud.refresh(present=self.presence.present())
                 if self.presence.take_return():
+                    # Warm before he speaks, not after.
+                    if self.brain is not None:
+                        _ = asyncio.ensure_future(self.brain.warm())
                     # He is back. Say what he missed, and only that.
                     caught_up = briefing.missed()
                     if caught_up:

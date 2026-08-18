@@ -56,7 +56,15 @@ llm:
   model: qwen2.5:7b-instruct     # primary — strong native tool calling
   temperature: 0.6
   num_predict: 120               # spoken replies are short; caps runaway generation
-  num_ctx: 4096                  # our prompt is ~1500 tok; smaller = less KV, faster
+  num_ctx: 8192                  # measured: the prefix is ~5300 tok with the
+                                 # fixed tool list, plus the system prompt and
+                                 # history. At 4096 the prompt overflowed and
+                                 # the cache stopped hitting entirely, which
+                                 # costs 25s a turn rather than 0.13s.
+  keep_warm_after_s: 480         # refresh the prompt cache after 8 idle
+                                 # minutes, but only while he is at the
+                                 # desk -- away, it expires and returns
+                                 # the model's 4 GB
   keep_alive: 15m                # shorter: the model costs ~8GB of a 15GB laptop
   # Stop Ollama when JARVIS closes. The model holds roughly 8 GB of a 15 GB
   # laptop (weights plus shared GPU memory), and leaving it resident after
@@ -64,7 +72,6 @@ llm:
   stop_ollama_on_exit: true
   max_tool_iterations: 6         # safety rail on the tool loop
   history_turns: 12              # conversational memory held in context
-  fast_path_words: 8             # short, keyword-free chit-chat skips the tools
   # Tool schemas per turn are NOT capped here. tools/router.py sends a
   # fixed core of 23 plus any extras the wording asks for; a numeric cap
   # sat here unread for a while, and applying it would have truncated

@@ -53,6 +53,49 @@ class Tool:
             },
         }
 
+    @property
+    def compact_schema(self) -> dict:
+        """The same tool, described in as few tokens as possible.
+
+        Every schema sent sits in the cached prompt prefix, and prompt
+        evaluation on this machine runs at 99 tokens a second -- so each
+        token here costs 10ms on every cache miss. The core set measured
+        7,062 characters, of which 3,566 were argument documentation
+        written for a person reading the source.
+
+        The model needs the first line and the argument names. The
+        reasoning, the examples and the history behind each tool stay in
+        the docstring, where they are useful and free.
+        """
+        summary = (self.description or "").strip()
+        # First paragraph only. Docstrings here open with the instruction
+        # and then explain themselves at length; the model only reads the
+        # instruction.
+        summary = summary.split(chr(10) + chr(10))[0].strip()
+        if len(summary) > 160:
+            cut = summary.rfind(". ", 0, 160)
+            summary = summary[:cut + 1] if cut > 40 else summary[:160]
+
+        params = {"type": "object", "properties": {}, "required": []}
+        source = self.parameters or {}
+        for name, spec in (source.get("properties") or {}).items():
+            lean = {"type": spec.get("type", "string")}
+            hint = (spec.get("description") or "").strip()
+            # One short line per argument, and nothing at all when the name
+            # already says it.
+            hint = hint.split(". ")[0].strip(" .")
+            if hint and len(hint) <= 72 and hint.lower() != name.lower():
+                lean["description"] = hint
+            if "enum" in spec:
+                lean["enum"] = spec["enum"]
+            params["properties"][name] = lean
+        params["required"] = list(source.get("required") or [])
+
+        return {"type": "function",
+                "function": {"name": self.name,
+                             "description": summary,
+                             "parameters": params}}
+
 
 REGISTRY: dict[str, Tool] = {}
 
@@ -182,7 +225,13 @@ async def execute(name: str, arguments: dict) -> str:
         text = str(result) if result is not None else "Done."
         if warning:
             text = f"{warning} {text}"
-        return text[:4000]  # keep tool output from swamping the context window
+        # A tool result stays in the conversation for the rest of the
+        # session, so its size is not paid once -- it is paid on every
+        # subsequent turn, and four of these at the old 4,000 characters
+        # filled the context window and forced the shift that threw away the
+        # cached prefix. He answers in two spoken sentences; 1,200 characters
+        # is more than enough to do that from.
+        return text[:1200]
     except Exception as e:
         log.exception("tool %s failed", name)
         return f"Error running {name}: {e}"

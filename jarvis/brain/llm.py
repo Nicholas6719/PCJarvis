@@ -41,32 +41,6 @@ _CORRUPT = re.compile(
 
 _WORD_RE = re.compile(r"[a-z']+")
 
-# If any of these appear, a tool probably helps, so the fast path steps aside.
-# Erring toward the slow path is deliberate: a wrong fast-path decision produces
-# a confidently invented answer, which is the one failure mode worth avoiding.
-FAST_PATH_BLOCKERS = {
-    # machine state
-    "battery", "cpu", "memory", "ram", "disk", "storage", "space", "volume",
-    "brightness", "screenshot", "clipboard", "lock", "sleep", "shutdown",
-    "restart", "system", "computer", "laptop", "pc", "temperature", "usage",
-    # actions
-    "open", "close", "launch", "start", "stop", "run", "play", "pause",
-    "skip", "next", "previous", "resume", "mute", "unmute", "set", "turn",
-    "switch", "focus", "quit", "kill",
-    # information
-    "time", "date", "day", "today", "tomorrow", "weather", "forecast", "news",
-    "search", "google", "look", "find", "web", "internet", "headlines",
-    "file", "files", "folder", "document", "read", "download",
-    # memory
-    "remember", "forget", "recall", "my", "mine", "playing", "song", "music",
-    "spotify", "track", "playlist",
-    # command vocabulary -- belt and braces behind the ordering fix above
-    "timer", "countdown", "alarm", "second", "seconds", "minute",
-    "minutes", "hour", "hours", "remind", "cancel", "screenshot",
-    "youtube", "github", "reddit", "gmail", "downloads", "desktop",
-    "directions", "brightness", "volume", "battery", "cpu", "disk",
-}
-
 
 def _is_corrupt(text: str) -> bool:
     """True if the model is emitting tool-call machinery as speech."""
@@ -178,6 +152,9 @@ class Brain:
         self._pending_confirm: tuple[str, dict] | None = None
 
     # ── helpers ────────────────────────────────────────────────────
+    def _touch(self) -> None:
+        self._last_used = time.time()
+
     def _options(self) -> dict:
         # num_predict is a real latency lever: generation runs at ~11 tok/s on
         # this iGPU, so an unbounded reply that rambles to 300 tokens costs half
@@ -213,14 +190,32 @@ class Brain:
         ]
 
     def _trim(self) -> None:
-        """Keep the last N exchanges, never orphaning a tool result from its call."""
+        """Keep recent exchanges, never orphaning a tool result from its call.
+
+        Trimming in blocks rather than one message at a time, which matters
+        more than it looks. Everything before the history -- the persona, the
+        priming, five thousand tokens of tool schemas -- stays cached, but
+        dropping the oldest message changes the sequence from that point, so
+        the whole conversation has to be re-read. Doing that on every turn
+        past the limit made the thirteenth exchange onwards permanently slow.
+
+        Cutting back to sixty per cent instead means it happens roughly once
+        every five turns rather than on all of them, and the turn it happens
+        on costs a couple of seconds rather than the twenty a full
+        re-evaluation used to.
+        """
         limit = self.history_turns * 2
         if len(self.history) <= limit:
             return
-        cut = len(self.history) - limit
+
+        keep = max(4, int(limit * 0.6))
+        cut = len(self.history) - keep
+        # Never start on a tool result: without the call above it, the
+        # message list is malformed and qwen answers with raw markup.
         while cut < len(self.history) and self.history[cut].get("role") == "tool":
             cut += 1
         self.history = self.history[cut:]
+        log.debug("trimmed history to %d messages", len(self.history))
 
     @staticmethod
     def _split_sentences(buffer: str) -> tuple[list[str], str]:
@@ -263,61 +258,23 @@ class Brain:
         return result
 
     # ── the main loop ──────────────────────────────────────────────
-    def _is_fast_path(self, text: str) -> bool:
-        """Short, keyword-free chit-chat that no tool could improve.
-
-        "thank you", "how are you", "that's funny" do not need 22 tool schemas
-        and a memory lookup. Skipping them turns a two-second reply into well
-        under one. Deliberately conservative: any hint that a tool might help
-        and it goes down the normal path, because a wrong fast-path decision
-        means a fabricated answer.
-        """
-        words = _WORD_RE.findall(text.lower())
-        if not words or len(words) > self.cfg.get("llm.fast_path_words", 8):
-            return False
-        return not (set(words) & FAST_PATH_BLOCKERS)
-
-    async def _respond_fast(self, user_text: str) -> AsyncIterator[Event]:
-        """A light call: no tools, no memory, only the last few turns."""
-        messages = [
-            {"role": "system", "content": persona.build_system_prompt(self.cfg)},
-            *self.history[-6:],
-            {"role": "user", "content": user_text},
-        ]
-        self.history.append({"role": "user", "content": user_text})
-        spoken = ""
-        buffer = ""
-        try:
-            stream = await self.client.chat(
-                model=self.model, messages=messages, stream=True,
-                options={**self._options(), "num_predict": 80},
-                keep_alive=self.cfg.get("llm.keep_alive", "30m"))
-            async for chunk in stream:
-                piece = (chunk.get("message") or {}).get("content") or ""
-                if not piece:
-                    continue
-                buffer += piece
-                sentences, buffer = self._split_sentences(buffer)
-                for s in sentences:
-                    spoken += s + " "
-                    yield Event("sentence", text=s)
-        except Exception as e:
-            log.exception("fast path failed")
-            yield Event("error", text=str(e))
-            return
-
-        tail = buffer.strip()
-        if tail:
-            spoken += tail
-            yield Event("sentence", text=tail)
-
-        final = spoken.strip()
-        if final:
-            self.history.append({"role": "assistant", "content": final})
-        self._trim()
-        log.info("fast path answered %r", user_text[:40])
-        yield Event("done", text=final)
-
+    # There was a fast path here: short, keyword-free chit-chat skipped the
+    # tools and the priming for a lighter call. It was written when the tool
+    # schemas were the expensive part, and it became the single biggest
+    # source of latency in the system once the prefix started being cached.
+    #
+    # Ollama caches one prefix per model. The fast path built a different
+    # message list -- no priming, no tools, six turns of history -- so every
+    # switch between it and a normal turn threw the cache away and paid a
+    # full re-evaluation. Measured: 'tell me a fact about the moon' 20.7s,
+    # 'what do I prefer to drink' 23.4s, against 1.2s for a weather question
+    # that stayed on the cached shape.
+    #
+    # It also silently removed every tool from those turns, which is why
+    # 'what is on my screen' could not call read_screen.
+    #
+    # One shape now, always. Chit-chat pays the same 0.4s of cached prompt as
+    # everything else, which is far less than the fast path ever saved.
     async def respond(self, user_text: str) -> AsyncIterator[Event]:
         # ORDER MATTERS, and getting it wrong cost three rounds of "the timer
         # still does not work". The fast path used to run first, and
@@ -370,14 +327,6 @@ class Brain:
                     yield Event("sentence", text=reply)
                 yield Event("done", text=reply)
                 return
-
-        # Short, keyword-free chit-chat that no tool could improve: no tools,
-        # no memory, only the last few turns. Reached only once the intent
-        # layer has declined the utterance.
-        if self._is_fast_path(user_text):
-            async for event in self._respond_fast(user_text):
-                yield event
-            return
 
         self.history.append({"role": "user", "content": user_text})
         self._trim()
@@ -486,6 +435,7 @@ class Brain:
 
     async def _unload(self) -> None:
         """Drop the model from memory, discarding its cached prefix."""
+        self._touch()
         try:
             await self.client.generate(model=self.model, keep_alive=0)
             await asyncio.sleep(1.0)  # let Ollama actually release it
@@ -562,6 +512,10 @@ class Brain:
         except Exception as e:
             return False, f"Ollama unreachable at {self.cfg.get('llm.host')}: {e}"
 
+    def seconds_since_use(self) -> float:
+        """How long since the model was last given anything to do."""
+        return time.time() - getattr(self, "_last_used", 0.0)
+
     async def warm(self) -> None:
         """Load the weights and pre-fill the KV cache.
 
@@ -569,6 +523,7 @@ class Brain:
         same core tool set -- so the ~11s first-turn prompt evaluation is paid
         during startup rather than by his first question.
         """
+        self._touch()
         try:
             t0 = time.perf_counter()
             # Ollama caches the prompt prefix against the loaded model. If that
