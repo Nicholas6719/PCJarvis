@@ -216,6 +216,55 @@ def memory_report() -> dict:
                 "tight": False}
 
 
+def _read_mic_mute() -> bool | None:
+    """The actual COM work. Never called on the main thread."""
+    import comtypes
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
+    comtypes.CoInitialize()
+    try:
+        for device in AudioUtilities.GetAllDevices():
+            name = str(getattr(device, 'FriendlyName', '') or '')
+            if 'Microphone' not in name:
+                continue
+            if str(getattr(device, 'state', '')).endswith('Active'):
+                iface = device._dev.Activate(
+                    IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+                return bool(iface.QueryInterface(IAudioEndpointVolume).GetMute())
+    finally:
+        try:
+            comtypes.CoUninitialize()
+        except Exception:
+            pass
+    return None
+
+
+def microphone_muted() -> bool | None:
+    """Is the capture device muted? None if it cannot be determined.
+
+    Worth checking at all because a muted microphone is indistinguishable,
+    from where he is sitting, from a broken wake word: the device opens,
+    reports itself healthy, and returns digital silence forever. That cost an
+    evening of hunting for a fault in code that was working perfectly.
+
+    Run on its own thread, and this is not fussiness. The first version
+    called CoInitialize on the boot thread, which is the same thread the
+    microphone stream is opened from moments later -- and the wake word then
+    stopped firing entirely. COM is per-thread, and this project has already
+    learned that once each for the media session, the location service and
+    OCR. A diagnostic that breaks the thing it is diagnosing is worse than no
+    diagnostic at all.
+    """
+    try:
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(_read_mic_mute).result(timeout=8)
+    except Exception:
+        log.debug('could not read the microphone mute state', exc_info=True)
+        return None
+
 def startup_check() -> dict:
     """Reap, then report. Called before anything heavy is loaded."""
     killed, freed = reap_orphaned_model_hosts()
@@ -251,6 +300,11 @@ def startup_check() -> dict:
         report['input_device'] = mic
         report['output_device'] = speaker
         log.info('audio in: %s', mic)
+
+        muted = microphone_muted()
+        report['mic_muted'] = muted
+        if muted:
+            log.warning('THE MICROPHONE IS MUTED -- he will not be heard')
         log.info('audio out: %s', speaker)
     except Exception:
         log.debug('could not enumerate audio devices', exc_info=True)

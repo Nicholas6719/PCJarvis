@@ -573,6 +573,14 @@ class Jarvis:
         quit_signal = asyncio.Event()
         BUS.on("app.quit", lambda _: quit_signal.set())
 
+        # If he cannot be heard, say so before anything else. A muted
+        # microphone looks exactly like a broken wake word from where he is
+        # sitting -- the device opens, reports itself fine, and returns
+        # silence -- and he has no way to tell those apart.
+        if self.memory_state.get("mic_muted"):
+            await self.speak("Your microphone is muted, sir. I will not "
+                             "hear you until it is unmuted.")
+
         if greet:
             # Not conversational: he has not asked for anything yet, so the
             # window stays shut and the wake word is still required.
