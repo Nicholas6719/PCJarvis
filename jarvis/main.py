@@ -726,13 +726,17 @@ async def amain(args) -> int:
     return 0
 
 
-def main() -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description="JARVIS")
     ap.add_argument("--no-ui", action="store_true", help="run in the terminal")
     ap.add_argument("--quiet", action="store_true", help="skip the greeting")
     ap.add_argument("--say", type=str, help="speak one line and exit")
     ap.add_argument("--ask", type=str, help="ask one question and exit")
-    args = ap.parse_args()
+    return ap
+
+
+def main() -> int:
+    args = build_arg_parser().parse_args()
 
     if args.no_ui or args.say or args.ask:
         try:
