@@ -294,6 +294,22 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:the\s+word\s+is|learn\s+the\s+(?:word|name))\s+(?P<w>[\w'-]+)\s*[.!]?$",
            "learn_word", lambda m: {"word": m.group("w")}),
 
+    # ══ clicking things ══
+    # click_button is deliberately NOT in the model's fixed tool list -- that
+    # list has a measured ceiling before the model stops calling tools at all,
+    # and this phrasing is regular enough to route directly.
+    #
+    # "click" alone is unambiguous for a screen action, so it needs no
+    # qualifier. "press" is not -- "press play" and "press pause" are media
+    # commands that have to keep falling through to the model, so "press"
+    # only matches here with an explicit "button" in the phrase.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?click\s+"
+           r"(?:on\s+|the\s+)?(?P<t>.+?)(?:\s+button|\s+link)?\s*[.!]?$",
+           "click_button", lambda m: {"text": m.group("t").strip()}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?press\s+"
+           r"(?:the\s+)?(?P<t>.+?)\s+button\s*[.!]?$",
+           "click_button", lambda m: {"text": m.group("t").strip()}),
+
     # ══ himself ══
     Intent(r"^(?:jarvis[,\s]+)?how\s+long\s+have\s+you\s+been\s+(?:running|up|awake|on)\s*[.?!]?$",
            "about_yourself", lambda m: {"topic": "uptime"}),

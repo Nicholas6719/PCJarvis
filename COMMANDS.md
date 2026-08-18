@@ -170,6 +170,23 @@ extra model, no memory cost. Reads the window in front by default, since
 reading the whole desktop returns the taskbar and every background window
 jumbled together. He reads text; he cannot describe pictures.
 
+### Clicking things
+**"click submit"** · **"click the OK button"** · **"press the cancel button"**
+
+Native Windows applications only — not the content of a web page. He asks
+Windows for the real name of every clickable thing in front of him (the same
+list a screen reader would get) and clicks the one that matches, rather than
+guessing at pixel coordinates from a screenshot. If nothing matches he tells
+you what he can actually see instead of failing silently.
+
+He refuses outright — not with a warning, an outright refusal — on anything
+that reads as a purchase or something destructive: *Buy Now*, *Delete
+Account*, *Confirm Payment*, *Uninstall*. Those you do yourself.
+
+A page open in a browser is a separate problem he cannot solve yet: Chromium
+does not expose its own content to Windows unless specifically asked to, so
+"click the Add to Cart button" on a real website will not find anything.
+
 ### Your own documents
 **"what did I write about the router?"** · **"find my notes on the project"**
 
