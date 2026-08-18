@@ -91,7 +91,7 @@ class Transcriber:
             initial_prompt=_prompt(),
         )
         text = " ".join(s.text.strip() for s in segments).strip()
-        log.debug("transcribed %.1fs of audio in %.2fs", len(audio) / 16000,
+        log.info("transcribed %.1fs of audio in %.2fs", len(audio) / 16000,
                   time.perf_counter() - t0)
 
         if text.lower().strip() in _HALLUCINATIONS:

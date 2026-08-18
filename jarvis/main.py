@@ -146,6 +146,7 @@ class Jarvis:
         self.speaker: Speaker | None = None
         self.listener: Listener | None = None
         self._chime = None
+        self._first_sound_at = None
         # A diagnostic drives real turns through handle(). Without this
         # they are recorded as conversation, and his exported PDF opened
         # with two exchanges that never happened.
@@ -353,6 +354,13 @@ class Jarvis:
         """One user utterance, from transcript to spoken reply."""
         assert self.brain is not None and self.listener is not None
 
+        # Where the time actually goes, per turn. "It feels laggy" is not
+        # something anyone can act on, and guessing at it once already cost
+        # a round of work on the wrong thing. The number that matters is the
+        # first one: how long he waits before hearing anything at all.
+        _turn_t0 = time.perf_counter()
+        self._first_sound_at = None
+
         # Only the long-session observation uses this: it will not
         # remark on how long he has been at the desk if he walked away
         # from it half an hour ago.
@@ -405,6 +413,8 @@ class Jarvis:
                     break
 
                 if event.type == "sentence":
+                    if self._first_sound_at is None:
+                        self._first_sound_at = time.perf_counter()
                     spoke = True
                     # Queue and keep going: synthesis runs a sentence ahead of
                     # playback, so the reply comes out as one continuous piece.
@@ -453,6 +463,14 @@ class Jarvis:
             self.speaker.say(persona.pick(persona.UNCLEAR_PHRASES, self.cfg))
 
         await self.speaker.wait_until_done()
+
+        total = time.perf_counter() - _turn_t0
+        if self._first_sound_at is not None:
+            log.info("turn: %.2fs to first word, %.2fs total  (%r)",
+                     self._first_sound_at - _turn_t0, total, text[:44])
+        else:
+            log.info("turn: %.2fs, nothing spoken  (%r)", total, text[:44])
+
         self.listener.resume_conversation()
         await self._after_speaking()
 
