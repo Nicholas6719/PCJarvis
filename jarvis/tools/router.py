@@ -30,54 +30,55 @@ from .registry import REGISTRY
 
 log = logging.getLogger("jarvis.tools.router")
 
-# Everything the model is ever offered. One list, every turn, in this order,
-# forever.
+# Everything the model is ever offered. One list, every turn, in the same
+# order, forever.
 #
 # The old router chose tools by wording: a fixed core plus extras admitted on
-# a keyword. It was built to keep the prompt prefix stable and it did the
+# a keyword. It was built to keep the prompt prefix stable and did the
 # opposite, because the schemas sit in that prefix ahead of the message.
-# Measured on this machine: asking a different question costs 0.30s, and
-# adding a single tool to the list costs 5.70s. Every turn whose wording
-# pulled in a different extra paid seconds before he said a word.
+# Measured: a different question costs 0.30s, one extra tool costs 5.70s.
 #
-# So the list never changes. The prefix is evaluated once during the
-# background warm at boot and cached from then on, which makes the size of
-# this list nearly free per turn -- it buys capability rather than latency.
-# What it must never do is vary.
+# It was then narrowed to 39 hand-picked names, on the stated grounds that
+# there was "a measured ceiling before the model stops calling tools at
+# all". That was never actually measured. When it finally was, against 20
+# utterances deliberately phrased outside the deterministic intents:
 #
-# Left out deliberately: things no one asks for by voice mid-conversation
-# (create_protocol, delete_protocol, run_command), and things already handled
-# instantly by a deterministic intent where the model adds nothing.
-OFFERED: tuple[str, ...] = (
-    # the machine
-    "get_time", "get_battery", "get_system_stats", "set_volume", "open_app",
-    "close_app", "take_screenshot", "lock_screen", "shutdown_computer",
-    "about_yourself",
-    # the web
-    "web_search", "search_site", "get_weather", "get_news", "read_webpage",
-    "show_images",
-    # the browser in front of him
-    "open_website", "search_in_browser", "get_directions", "current_page",
-    # his files
-    "find_files", "read_file", "open_file", "search_documents", "create_pdf",
-    "export_conversation",
-    # what is playing
-    "play_music", "play_pause", "next_track", "now_playing",
-    # copied text, and the screen
-    "proofread_clipboard", "translate_clipboard", "summarise_clipboard",
-    "read_screen",
-    # memory, time, and what he asks it to hold
-    "remember", "recall", "set_timer", "watch_for_process", "run_protocol",
-)
+#     39 tools   13/20 correct
+#     60 tools   13/20
+#     97 tools   14/20
+#
+# There is no ceiling in that range. Withholding 58 tools bought nothing and
+# cost every phrasing the intents happen to miss. So he is offered all of
+# them, and the list is derived rather than hand-maintained -- a name typed
+# into a tuple silently disappears when the tool is renamed, and the whole
+# point is that this list never quietly changes shape.
+#
+# Sorted, because the prefix must be byte-identical between runs, and dict
+# order depends on import order.
+#
+# Cost of the wider list: 6,353 prompt tokens instead of 3,571, which is 55s
+# of background warm at boot instead of 24s, and 0.13 GB more KV cache. Per
+# turn it is free -- the prefix is cached and replays in 0.12s either way.
+EXCLUDED: frozenset[str] = frozenset({
+    # Arbitrary PowerShell. It has a confirmation gate, but a model that can
+    # reach for it will eventually reach for it on a misheard sentence, and
+    # nothing he asks for by voice needs it.
+    "run_command",
+})
+
+
+def offered_names() -> list[str]:
+    """Every tool he may call, in a stable order."""
+    return sorted(n for n in REGISTRY if n not in EXCLUDED)
 
 
 def select(query: str = "", limit: int | None = None) -> list[dict]:
     """The tools to offer. Always the same ones, in the same order.
 
-    query is ignored, and kept only so the callers and the diagnostics do not
-    all have to change. Varying this by wording is precisely the bug.
+    query is ignored, and kept only so callers and diagnostics need not all
+    change. Varying this by wording is precisely the bug.
     """
-    schemas = [REGISTRY[n].compact_schema for n in OFFERED if n in REGISTRY]
+    schemas = [REGISTRY[n].compact_schema for n in offered_names()]
     if limit and len(schemas) > limit:
         schemas = schemas[:limit]
     return schemas

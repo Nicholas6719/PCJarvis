@@ -249,6 +249,54 @@ async def test_one_prompt_shape() -> None:
     check("and it is byte-identical, not merely the same length",
           first == same)
 
+async def test_context_budget() -> None:
+    """A long conversation must still fit the context window.
+
+    Overflowing it is not a graceful degradation -- the cache stops hitting
+    and every turn pays full prompt evaluation, which measured 28.77s in the
+    end-to-end run against 8.93s once fixed.
+
+    The cause was tool results kept whole in history. registry.execute caps
+    them at 4,000 characters and web_search regularly fills it; twelve of
+    those reached 11,491 tokens against a 12,288 window. They are shortened
+    for the transcript now, which is the difference between 94% of the
+    window and 66%.
+    """
+    print("\n[7] a long conversation still fits")
+    from jarvis.brain.llm import Brain
+    from jarvis.brain import persona
+    from jarvis.tools import registry, router
+
+    registry.load_all()
+    brain = Brain(CONFIG)
+
+    big = "y" * 4000          # what execute() caps a tool result at
+    kept = brain._remember_result("web_search", big)["content"]
+    check("a long tool result is shortened for history",
+          len(kept) < 600, f"{len(kept)} chars kept of {len(big)}")
+
+    # Worst case he can actually reach: every turn a tool call with a
+    # maximum-size result. Estimated at ~4.2 characters per token, which is
+    # close enough for a budget check and needs no model call.
+    turns = CONFIG.get("llm.history_turns", 12)
+    history = []
+    for i in range(turns):
+        history.append({"role": "user", "content": "a question about things"})
+        history.append({"role": "assistant", "content": "x" * 200})
+        history.append(brain._remember_result("web_search", big))
+
+    import json
+
+    chars = (len(persona.build_system_prompt(CONFIG))
+             + len(json.dumps(router.select()))
+             + len(json.dumps(history)))
+    tokens = chars / 4.2
+    ctx = CONFIG.get("llm.num_ctx", 8192)
+    check(f"worst-case prompt fits in num_ctx ({ctx})",
+          tokens < ctx * 0.85,
+          f"~{tokens:.0f} tokens, {tokens/ctx*100:.0f}% of the window")
+
+
 async def main() -> int:
     print("=" * 70)
     print(" Phase 1 acceptance -- the conversation loop")
@@ -261,6 +309,7 @@ async def main() -> int:
     await test_capture_uses_preroll()
     await test_speaker_order_and_stop()
     await test_one_prompt_shape()
+    await test_context_budget()
 
     passed = sum(1 for _, ok, _ in results if ok)
     failed = sum(1 for _, ok, _ in results if not ok)

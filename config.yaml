@@ -56,7 +56,7 @@ llm:
   model: qwen2.5:7b-instruct     # primary — strong native tool calling
   temperature: 0.6
   num_predict: 120               # spoken replies are short; caps runaway generation
-  num_ctx: 8192                  # measured: the prefix is ~5300 tok with the
+  num_ctx: 12288                  # measured: the prefix is ~5300 tok with the
                                  # fixed tool list, plus the system prompt and
                                  # history. At 4096 the prompt overflowed and
                                  # the cache stopped hitting entirely, which

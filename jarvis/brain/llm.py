@@ -189,6 +189,26 @@ class Brain:
             *self.history,
         ]
 
+    # A tool result can be 4,000 characters -- registry.execute caps it there
+    # -- and web_search regularly is. The model needs all of it to answer the
+    # turn it arrived on, and needs almost none of it three turns later.
+    #
+    # Keeping them whole measured 11,491 prompt tokens after twelve such
+    # turns, against a 12,288 window: close enough to the edge that the next
+    # long answer tips over it, and everything re-evaluates. That is the
+    # 28-second turn in the end-to-end run.
+    #
+    # The head of a result is the part that carries the answer; the tail is
+    # the fourth and fifth search hits nobody read.
+    HISTORY_RESULT_CHARS = 400
+
+    def _remember_result(self, name: str, result: str) -> dict:
+        """A tool result, shortened for the transcript it will sit in."""
+        text = result or ""
+        if len(text) > self.HISTORY_RESULT_CHARS:
+            text = text[:self.HISTORY_RESULT_CHARS].rstrip() + " [...]"
+        return {"role": "tool", "name": name, "content": text}
+
     def _trim(self) -> None:
         """Keep recent exchanges, never orphaning a tool result from its call.
 
@@ -315,8 +335,7 @@ class Brain:
                     "role": "assistant", "content": "",
                     "tool_calls": [{"function": {"name": name,
                                                  "arguments": args}}]})
-                self.history.append({"role": "tool", "name": name,
-                                     "content": result})
+                self.history.append(self._remember_result(name, result))
                 self.history.append({"role": "assistant", "content": reply})
                 self._trim()
                 log.info("intent shortcut answered in one step: %s", name)
@@ -427,9 +446,7 @@ class Brain:
                 log.info("tool %s(%s) -> %s", name, args, result[:120])
                 yield Event("tool_end", name=name, text=result)
 
-                self.history.append(
-                    {"role": "tool", "name": name, "content": result}
-                )
+                self.history.append(self._remember_result(name, result))
 
         yield Event("error", text="I got stuck in a loop there. Let's start again.")
 

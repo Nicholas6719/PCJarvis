@@ -294,6 +294,38 @@ INTENTS: list[Intent] = [
     Intent(r"^(?:jarvis[,\s]+)?(?:the\s+word\s+is|learn\s+the\s+(?:word|name))\s+(?P<w>[\w'-]+)\s*[.!]?$",
            "learn_word", lambda m: {"word": m.group("w")}),
 
+    # English lets the particle move: "shut down the machine" and "shut the
+    # machine down" are the same sentence, and only the first was matched.
+    # The second reached a model that answered it with nothing at all.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:shut|turn|power)\s+(?:my\s+|the\s+)?(?:computer|pc|laptop|machine|system)\s+(?:down|off)\s*[.!]?$",
+           "shutdown_computer", lambda m: {"restart": False}),
+
+    # "look up X" is as plain an instruction to search as exists, and it was
+    # falling through to a model that called nothing.
+    Intent(r"^(?:jarvis[,\s]+)?(?:please\s+)?(?:look\s+up|google|search\s+(?:for|the\s+web\s+for))\s+(?P<q>.+?)\s*[.!?]?$",
+           "web_search", lambda m: {"query": m.group("q").strip()}),
+
+    Intent(r"^(?:jarvis[,\s]+)?what\s+do\s+you\s+(?:know|remember)\s+about\s+(?P<q>.+?)\s*[.?!]?$",
+           "recall", lambda m: {"query": m.group("q").strip()}),
+
+    # ══ phrasings the model kept dropping ══
+    # Measured against 20 utterances deliberately worded outside this table:
+    # the model called no tool at all on 6 of them, every time, at every tool
+    # count. These are the ones a person actually says, so they are routed
+    # here instead -- instant, and certain, rather than 70% likely.
+    Intent(r"^(?:jarvis[,\s]+)?(?:give|get)\s+me\s+(?P<dur>[\w\s.-]+?)(?:\s+please)?\s*[.!]?$",
+           "set_timer", _timer_args, guard=_timer_guard),
+    Intent(r"^(?:jarvis[,\s]+)?(?:keep\s+an\s+eye\s+on|watch(?:\s+out)?\s+for|let\s+me\s+know\s+(?:when|about))\s+(?:the\s+|my\s+)?(?P<what>[\w.\s-]+?)(?:\s+for\s+me)?\s*[.!]?$",
+           "watch_for_process", _process_name),
+    Intent(r"^(?:jarvis[,\s]+)?(?:put|turn|translate)\s+(?:this|that|it)\s+(?:in)?to\s+(?P<lang>[a-z]+)\s*[.!?]?$",
+           "translate_clipboard", lambda m: {"language": m.group("lang")}),
+    Intent(r"^(?:jarvis[,\s]+)?(?:tidy|clean|neaten|smarten)\s+(?:this|that|it)(?:\s+\w+)?\s+up(?:\s+for\s+me)?\s*[.!?]?$",
+           "proofread_clipboard"),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+(?:does|do)\s+(?:this|that|it)\s+(?:\w+\s+)*?(?:on\s+(?:my|the)\s+screen\s+)?say\s*[.?!]?$",
+           "read_screen"),
+    Intent(r"^(?:jarvis[,\s]+)?what(?:'s| is)\s+(?:this|that)\s+(?:song|track|playing)\s*[.?!]?$", "now_playing"),
+    Intent(r"^(?:jarvis[,\s]+)?what\s+song\s+is\s+(?:this|that|playing)\s*[.?!]?$", "now_playing"),
+
     # ══ clicking things ══
     # click_button is deliberately NOT in the model's fixed tool list -- that
     # list has a measured ceiling before the model stops calling tools at all,
