@@ -210,18 +210,44 @@ async def test_speaker_order_and_stop() -> None:
     speaker.shutdown()
 
 
-async def test_fast_path() -> None:
-    print("\n[6] fast path")
+async def test_one_prompt_shape() -> None:
+    """Every model call must send the same prompt shape.
+
+    This replaces the old fast-path test. The fast path sent short chit-chat
+    with no tools and a truncated history -- a different prefix -- and it was
+    removed when the tool list was fixed. Measured on this machine, that was
+    not a neutral change but a fix: the fast path itself looked quick in
+    isolation (0.25s) while evicting the cached prefix, so the next real
+    question paid 17 seconds. A casual "hello" was quietly making whatever he
+    asked next slow.
+
+    So the invariant worth defending is not "is this short enough to skip
+    tools" but "does anything send a different shape". Nothing should.
+    """
+    print("\n[6] one prompt shape, always")
     from jarvis.brain.llm import Brain
+    from jarvis.tools import registry, router
 
+    registry.load_all()
     brain = Brain(CONFIG)
-    fast = ["thank you", "how are you", "good morning", "that's funny"]
-    slow = ["what is my battery at", "play some music", "remember I like tea",
-            "what time is it", "open spotify"]
-    bad = [t for t in fast if not brain._is_fast_path(t)]
-    bad += [f"(slow wanted) {t}" for t in slow if brain._is_fast_path(t)]
-    check("fast path routing", not bad, "; ".join(bad[:3]))
 
+    check("the fast path is gone, not renamed",
+          not any(hasattr(brain, n) for n in
+                  ("_is_fast_path", "_respond_fast")),
+          "a second prompt shape would evict the cache")
+
+    # router.select ignores its argument on purpose; wording must not change
+    # the tool list, because the schemas sit in the cached prefix.
+    shapes = {len(router.select(q)) for q in
+              ("hello", "what is on my screen", "search amazon for a comic",
+               "thank you", "remember I like tea")}
+    check("the tool list never varies by wording", len(shapes) == 1,
+          f"saw {sorted(shapes)} tool counts")
+
+    first = router.select("hello")
+    same = router.select("something entirely different")
+    check("and it is byte-identical, not merely the same length",
+          first == same)
 
 async def main() -> int:
     print("=" * 70)
@@ -234,7 +260,7 @@ async def main() -> int:
     await test_conversation_window()
     await test_capture_uses_preroll()
     await test_speaker_order_and_stop()
-    await test_fast_path()
+    await test_one_prompt_shape()
 
     passed = sum(1 for _, ok, _ in results if ok)
     failed = sum(1 for _, ok, _ in results if not ok)

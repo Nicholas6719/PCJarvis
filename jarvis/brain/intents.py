@@ -310,6 +310,15 @@ INTENTS: list[Intent] = [
            r"(?:the\s+)?(?P<t>.+?)\s+button\s*[.!]?$",
            "click_button", lambda m: {"text": m.group("t").strip()}),
 
+    # list_clickable was reachable by nothing at all: no intent, and kept
+    # off the model list for the same ceiling reason as click_button --
+    # while click_button's own "I do not see anything called X" reply
+    # invites him to ask what IS there. Routed directly, like its partner.
+    Intent(r"^(?:jarvis[,\s]+)?what(?:'s|s| is| can i)?\s*(?:can\s+i\s+)?click(?:able)?(?:\s+on)?(?:\s+here)?\s*[.?!]?$",
+           "list_clickable"),
+    Intent(r"^(?:jarvis[,\s]+)?(?:list|show)\s+(?:me\s+)?(?:what|everything)\s+(?:i\s+can\s+)?click(?:able)?(?:\s+on)?\s*[.?!]?$",
+           "list_clickable"),
+
     # ══ himself ══
     Intent(r"^(?:jarvis[,\s]+)?how\s+long\s+have\s+you\s+been\s+(?:running|up|awake|on)\s*[.?!]?$",
            "about_yourself", lambda m: {"topic": "uptime"}),

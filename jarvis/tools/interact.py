@@ -57,6 +57,11 @@ def _named_window(app: str):
         title = (w.window_text() or "")
         if needle in title.lower() and "J.A.R.V.I.S" not in title:
             return w
+    # Falling off the end returned None, which then flowed through the
+    # whole click path and came back as "I do not see anything clickable in
+    # that window" -- implying the window exists and is empty. Naming a
+    # window that is not open should say so.
+    raise LookupError(f"no window matching {app!r}")
 
 
 def _looks_like_a_browser(window) -> bool:
@@ -72,7 +77,6 @@ def _looks_like_a_browser(window) -> bool:
         return any(b in title for b in BROWSERS)
     except Exception:
         return False
-    raise LookupError(f"no window matching {app!r}")
 
 
 def _clickable(window) -> list:

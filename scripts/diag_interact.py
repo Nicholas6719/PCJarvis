@@ -80,6 +80,23 @@ must_allow = ["Save", "Cancel", "Next", "OK", "Seven", "Submit search",
 for name in must_allow:
     check(f"allows {name!r}", not _DANGEROUS.search(name))
 
+print("\n[honesty] a window that is not open must say so")
+# It used to fall off the end of the search returning None, which flowed
+# through the whole click path and came back as "I do not see anything
+# clickable in that window" -- implying the window was open and empty.
+from jarvis.tools import registry
+
+registry.load_all()
+from jarvis.tools.interact import click_button, list_clickable
+
+missing = "zzz-no-such-window-zzz"
+said = click_button("anything", app=missing)
+check("click_button names the missing window", "No window matching" in said, said)
+check("and does not claim it was empty",
+      "clickable" not in said.lower(), said)
+said = list_clickable(app=missing)
+check("list_clickable names it too", "No window matching" in said, said)
+
 print("\n" + "=" * 66)
 print(f" {passed} passed, {failed} failed")
 print("=" * 66)
